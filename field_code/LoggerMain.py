@@ -8,8 +8,9 @@
 ## 2014-11-18 TimC - changed mon.state to property, added prevState; cleanup state selection; added example gpio get
 ## 2014-11-20 BenA - sidestepping some issues with the ADC library for now; using Adafruit library until understood
 ## 2014-11-24 BenA - added watchdog, config file query, uniqueID, gpio setup, pressure read
+## 2014-11-30 TimC - accomodate new i2c exceptions; remove random; init burners as off
 
-import time, math, random, sys, os
+import time, math, sys, os
 from decimal import *
 import LoggerLib as Lib
 from Adafruit_ADS1x15_mod import ADS1x15 
@@ -59,7 +60,7 @@ for control in Lib.controls:
 #TODO Setup/clear UART buffer?
 ser = serial.Serial(port="/dev/tty4",baudrate=9600, timeout=1)
 #xbee = XBee(ser)
-while True:
+for index in range(3): #while True:
     try:
         print ("xbee reads: {}".format(ser.read(100)))
     except KeyboardInterrupt:
@@ -129,7 +130,7 @@ def fetchTempsAdafruit(ADCs):
                 #print("adafruitLib ADC 0x{:02x} measures:{} , AIN:{}".format(ADC.address,Volts,mux))
                 for sensor in Lib.sensors:
                     if isinstance(sensor,Lib.Tc):
-                        if (sensor.adc.i2cIndex == ADC.busnum) \
+                        if (sensor.adc.i2c == ADC.busnum) \
                          and (sensor.adc.addrs[sensor.adcIndex] == ADC.address) \
                          and (sensor.mux == mux):
                             if (sensor.name == "TC15@U15") or (sensor.name == "TC16@U15"):
@@ -146,14 +147,19 @@ def fetchTempsAdafruit(ADCs):
     pass
 
 def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unreliable Data)
+    print "##############################################################################"
     for mux in range(Lib.Adc.NMUX):
         for job in range(3): ## [ start, sleep, fetch ]
-            for sensor in Lib.sensors:
-                if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
+            for sensor in Lib.ains:
+                if sensor.use and sensor.mux == mux: # and sensor.name == "TC5@U13":
                     adc = sensor.adc
                     if (job == 0): ## start
-                        adc.startAdc(mux,sps=8)
-                        adc.startTime = time.time() ## DBG
+                        try:
+                            adc.startAdc(mux, sps=8)
+                        except Exception as err:
+                            print("error starting ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
+                                    .format(sensor.name, adc.addr, mux, err))
+                            adc.startTime = time.time() ## really needed?
                     elif (job == 1): ## sleep
                         elapsed = time.time() - adc.startTime 
                         adctime = (1.0 / adc.sps) + .001 
@@ -162,11 +168,18 @@ def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unre
                             #        .format(adc.addr, sensor.sps, adctime, elapsed))
                             time.sleep(adctime - elapsed + .002)
                     else: #if (job == 2): ## fetch
-                        result = adc.fetchAdc()
-                        print("{} \tResult: {}V, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
-                            .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
-                        sensor.appendAdcValue(result)
-    pass
+                        try:
+                            result = adc.fetchAdc()
+                            #print("{} \tResult: {}V, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
+                            #	.format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+                            sensor.appendAdcValue(result)
+                        except Exception as err:
+                            print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
+                                    .format(sensor.name, adc.addr, mux, err))
+
+    ## print in initial order
+    for sensor in Lib.ains:
+        print("sensor: {}  sps: {}  pga: {}  result: {}".format(sensor.name, adc.sps, adc.pga, sensor.getMostRecentValue()))
 
 def fetchPressure():
     #Read Pressure sensor check
@@ -252,7 +265,7 @@ while True:
     #print("time at top of loop: {}".format(tick))
 
     ## Scan all inputs
-    #fetchTemps() ## commented for DBG
+    fetchTemps() ## commented for DBG
     fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
     
     #Read Pressure sensor check
@@ -272,10 +285,11 @@ while True:
     ## Process data
     ## Determine status of both burners
     ## Assign operating mode of wh and furnace
-    whmode = wh.mode()
-    fmode = f.mode()
-    print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
-            .format(tick, f.tc.getMostRecentValue(), f.status(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
+    whmode = Lib.Burner.Mode5Off #wh.mode() ## TODO
+    fmode = Lib.Burner.Mode5Off #f.mode() ## TODO
+    if False:
+        print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
+                .format(tick, f.tc.getMostRecentValue(), f.status(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
 
     ## Assign monitoring system state [these need to be re-checked thoroughly--TimC]
     if ((whmode == Lib.Burner.Mode2On) or (fmode == Lib.Burner.Mode2On)): 
@@ -305,7 +319,8 @@ while True:
             mon.state = Mon.State6Off
         ## else no change
     else:
-        print("no state change")
+        #print("no state change")
+        pass
 
     #for sensor in Lib.sensors:
 	#	print sensor.name
