@@ -13,7 +13,7 @@ import time, math, random, sys, os
 from decimal import *
 import LoggerLib as Lib
 from Adafruit_ADS1x15_mod import ADS1x15 
-from xbee import XBee
+from xbee import zigbee
 import serial
 
 
@@ -57,11 +57,11 @@ for control in Lib.controls:
         control.setValue(1) #write GPIO.HIGH
 
 #TODO Setup/clear UART buffer?
-ser = serial.Serial(port="/dev/tty4",baudrate=9600, timeout=1)
-#xbee = XBee(ser)
+ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1)
+xbee = zigbee.ZigBee(ser)
 while True:
     try:
-        print ("xbee reads: {}".format(ser.read(100)))
+        print ("xbee reads: {}".format(xbee.wait_read_frame()))
     except KeyboardInterrupt:
         break
 
@@ -133,12 +133,12 @@ def fetchTempsAdafruit(ADCs):
                          and (sensor.adc.addrs[sensor.adcIndex] == ADC.address) \
                          and (sensor.mux == mux):
                             if (sensor.name == "TC15@U15") or (sensor.name == "TC16@U15"):
-                                result = (360*(Volts-0.5))+32 #for deg. F
-                                #print sensor.name, "reads ", result, "F"
+                                result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
+                                print sensor.name, "reads ", result, "F. 0.5V BIASED"
                                 #print "I2C Address: ",sensor.adc.addrs[sensor.adcIndex],"AIN:",sensor.mux
                             else:
                                 result = (360*Volts)+32 #for deg. F, 0V bias
-                                #print sensor.name, "reads ", ((360*(Volts))+32), "F"
+                                print sensor.name, "reads ", result, "F"
                                 #print("I2C Address: 0x{:02x}, AIN: {},I2Cindex: {}" \
                                 #  .format(sensor.adc.addrs[sensor.adcIndex],sensor.mux, sensor.adc.i2cIndex))
                             #result = random.random() * 200.0 ## DBG
@@ -156,14 +156,19 @@ def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unre
                         adc.startTime = time.time() ## DBG
                     elif (job == 1): ## sleep
                         elapsed = time.time() - adc.startTime 
-                        adctime = (1.0 / adc.sps) + .001 
+                        adctime = (1.0 / adc.sps) + .062 
                         if (elapsed < adctime):
-                            #print("fetching 0x{:02x} too early: at {} sps delay should be {} but is {}"\
-                            #        .format(adc.addr, sensor.sps, adctime, elapsed))
+                            print("fetching 0x{:02x} too early: at {} sps delay should be {} but is {}"\
+                                    .format(adc.addr, sensor.sps, adctime, elapsed))
                             time.sleep(adctime - elapsed + .002)
                     else: #if (job == 2): ## fetch
-                        result = adc.fetchAdc()
-                        print("{} \tResult: {}V, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
+                        Value = adc.fetchAdc()
+                        Volts = Value/1000
+                        if (sensor.name == "TC15@U15") or (sensor.name=="TC16@U15"):
+                            result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
+                        else:
+                            result = (360*Volts)+32 #for deg. F
+                        print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
                             .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
                         sensor.appendAdcValue(result)
     pass
@@ -240,7 +245,7 @@ f = Lib.furnace
 mon = Mon()
 
 ## determine the current state
-#fetchTemps()
+fetchTemps()
 fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15]) #grab all ADC inputs from TC ADCs 
 
 ## main loop
@@ -252,8 +257,14 @@ while True:
     #print("time at top of loop: {}".format(tick))
 
     ## Scan all inputs
-    #fetchTemps() ## commented for DBG
+    fetchTemps() ## commented for DBG
     fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
+
+    for mux in range(Lib.Adc.NMUX):
+        for sensor in Lib.sensors:
+            if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
+                print "Temp difference for {} is {}F".format(sensor.name,(sensor.getMostRecentValue()-\
+                    sensor.getPreviousValue()))
     
     #Read Pressure sensor check
     for sensor in Lib.sensors:
