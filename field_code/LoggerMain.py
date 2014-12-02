@@ -56,14 +56,8 @@ for control in Lib.controls:
     if control.name == "24V@P8-15":
         control.setValue(1) #write GPIO.HIGH
 
-#TODO Setup/clear UART buffer?
+#Setup zigbee UART for asynchronous operation
 ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1)
-xbee = zigbee.ZigBee(ser)
-while True:
-    try:
-        print ("xbee reads: {}".format(xbee.wait_read_frame()))
-    except KeyboardInterrupt:
-        break
 
 ## set furnace and waterhtr TCs
 if True:
@@ -114,10 +108,17 @@ def get_free_space_bytes(folder):
     return st.f_bavail * st.f_frsize
     pass
 
+def print_xbee(data):
+    try:
+        print ("xbee reads: {}".format(xbee.wait_read_frame()))
+    except:
+        print ("unable to print or parse xbee data")
+    pass
+
 def fetchCO2():
     pass
 
-def fetchTempsAdafruit(ADCs):
+def fetchTempsAdafruit(ADCs): #TODO remove this function once fetchTemps() is verified sound
     for mux in range(4):
         for job in range(2): ##[Start, fetch]
             for ADC in ADCs:
@@ -134,18 +135,18 @@ def fetchTempsAdafruit(ADCs):
                          and (sensor.mux == mux):
                             if (sensor.name == "TC15@U15") or (sensor.name == "TC16@U15"):
                                 result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
-                                print sensor.name, "reads ", result, "F. 0.5V BIASED"
+                                #print sensor.name, "reads ", result, "F. 0.5V BIASED"
                                 #print "I2C Address: ",sensor.adc.addrs[sensor.adcIndex],"AIN:",sensor.mux
                             else:
                                 result = (360*Volts)+32 #for deg. F, 0V bias
-                                print sensor.name, "reads ", result, "F"
+                                #print sensor.name, "reads ", result, "F"
                                 #print("I2C Address: 0x{:02x}, AIN: {},I2Cindex: {}" \
                                 #  .format(sensor.adc.addrs[sensor.adcIndex],sensor.mux, sensor.adc.i2cIndex))
                             #result = random.random() * 200.0 ## DBG
                             sensor.appendAdcValue(result)
     pass
 
-def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unreliable Data)
+def fetchTemps():    #NOTE will execute, but test sufficiently to verify reliable Data
     for mux in range(Lib.Adc.NMUX):
         for job in range(3): ## [ start, sleep, fetch ]
             for sensor in Lib.sensors:
@@ -156,10 +157,10 @@ def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unre
                         adc.startTime = time.time() ## DBG
                     elif (job == 1): ## sleep
                         elapsed = time.time() - adc.startTime 
-                        adctime = (1.0 / adc.sps) + .062 
+                        adctime = (1.0 / adc.sps) + .072 
                         if (elapsed < adctime):
-                            print("fetching 0x{:02x} too early: at {} sps delay should be {} but is {}"\
-                                    .format(adc.addr, sensor.sps, adctime, elapsed))
+                            #print("fetching 0x{:02x} too early: at {} sps delay should be {} but is {}"\
+                            #        .format(adc.addr, sensor.sps, adctime, elapsed))
                             time.sleep(adctime - elapsed + .002)
                     else: #if (job == 2): ## fetch
                         Value = adc.fetchAdc()
@@ -168,8 +169,8 @@ def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unre
                             result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
                         else:
                             result = (360*Volts)+32 #for deg. F
-                        print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
-                            .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+                        #print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
+                        #    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
                         sensor.appendAdcValue(result)
     pass
 
@@ -230,6 +231,9 @@ class Mon(object):
 #############
 ## start main
 #############
+#setup Xbee (must be after def of print_xbee)
+xbee = zigbee.ZigBee(ser,callback=print_xbee)
+
 Lib.Adc.debug = False
 AdaAdcU11 = ADS1x15(ic=ADS1115,address=0x48,busnum=2)
 AdaAdcU13 = ADS1x15(ic=ADS1115,address=0x49,busnum=2) 
@@ -252,6 +256,7 @@ fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15]) #grab all ADC inpu
 Lib.Timer.start()
 Lib.Timer.sleep()
 while True:
+  try:  #NOTE this is for debug, except Keyboard Interrupt 
     ## Capture time at top of second
     tick = Lib.Timer.stime()
     #print("time at top of loop: {}".format(tick))
@@ -263,8 +268,9 @@ while True:
     for mux in range(Lib.Adc.NMUX):
         for sensor in Lib.sensors:
             if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
-                print "Temp difference for {} is {}F".format(sensor.name,(sensor.getMostRecentValue()-\
-                    sensor.getPreviousValue()))
+                if (sensor.getMostRecentValue()-sensor.getPreviousValue())>4:
+                    print "Temp difference for {} is {}F".format(sensor.name,(sensor.getMostRecentValue()-\
+                      sensor.getPreviousValue()))
     
     #Read Pressure sensor check
     for sensor in Lib.sensors:
@@ -346,4 +352,9 @@ while True:
 
     Lib.Timer.sleep()
     pass
-
+    
+  except KeyboardInterrupt: #NOTE This is for debug (allows xbee halt and serial cleanup)
+    break
+#cleanup 
+xbee.halt()
+ser.close()
