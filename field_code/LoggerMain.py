@@ -13,6 +13,7 @@ import time, math, random, sys, os
 from decimal import *
 import LoggerLib as Lib
 from Adafruit_ADS1x15_mod import ADS1x15 
+import Adafruit_BBIO.UART as UART
 from xbee import zigbee
 import serial
 
@@ -57,6 +58,7 @@ for control in Lib.controls:
         control.setValue(1) #write GPIO.HIGH
 
 #Setup zigbee UART for asynchronous operation
+UART.setup("UART4")
 ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1)
 
 ## set furnace and waterhtr TCs
@@ -110,7 +112,20 @@ def get_free_space_bytes(folder):
 
 def print_xbee(data):
     try:
-        print ("xbee reads: {}".format(xbee.wait_read_frame()))
+        for item in data:
+            #print "item is",str(item)
+            if (str(item) == 'source_addr_long') or (str(item) == 'source_addr'):
+                print(item),
+                print(data[item].encode("hex"))
+            elif str(item) == 'samples':
+                samplesDict = data[item]
+                for x in samplesDict:
+                    for y in x:
+                        print(y),
+                        print(x[y])
+            else:
+                print(item),
+                print(data[item])
     except:
         print ("unable to print or parse xbee data")
     pass
