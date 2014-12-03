@@ -8,6 +8,9 @@
 ## 2014-11-18 TimC - changed mon.state to property, added prevState; cleanup state selection; added example gpio get
 ## 2014-11-20 BenA - sidestepping some issues with the ADC library for now; using Adafruit library until understood
 ## 2014-11-24 BenA - added watchdog, config file query, uniqueID, gpio setup, pressure read
+## 2014-11-26 TimC - accomodate new i2c exceptions
+## 2014-11-30 DanC - added material related to record control and fetching data values
+##
 
 import time, math, random, sys, os
 from decimal import *
@@ -104,6 +107,15 @@ if False: ## TODO: needs update
 ###########################################################################################
 ## local functions
 
+# ==============================================================================
+# DC 11.28 We want a single call to fetch ALL ain/I2C sensor values, 
+#  no reason to treat CO2 separately.  
+# Suggest we drop fetchCO2() and revise fetchTemps() to become fetchI2cInputs()
+# Not sure if this new function should include the I2C pressure sensor,
+#  if not, perhaps fetchAdcInputs()
+# Looking for new XBee data on the uart will still be separate
+
+
 def get_free_space_bytes(folder):
     #command to check remaining free space on the storage device
     st = os.statvfs(folder)
@@ -187,6 +199,10 @@ def fetchTemps():    #NOTE will execute, but test sufficiently to verify reliabl
                         #print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
                         #    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
                         sensor.appendAdcValue(result)
+# DC 11.28 also need to do:  
+        # When done with DLVR reads, calculate average and range within the values
+        # Pressure sensor reads might be interleaved with i2c adc reads above, or
+        #  might be a separate function.
     pass
 
 def fetchPressure():
@@ -216,6 +232,48 @@ def fetchPressure():
     return pressureAvg
     pass
 
+# DC 11.28 New functions for building and writing records
+
+def accumulateValues():       # DC 11.28 
+    for sensor in Lib.sensors:
+        sensor.value.sum(sensor.currentvalue)  # Add current val to running sum
+        sensor.value.min(sensor.currentvalue)  # Compare current val to running min
+        sensor.value.max(sensor.currentvalue)  # Compare curr ent val to running max
+        sensor.value.count(sensor.currentvalue) # Track number of values for avg calc 
+        # OR, accumulate values over the ~60 sec period, 
+        #  and do the arithmetic at end of period:
+        sensor.appendAdcValue(sensor.currentvalue) 
+
+def closeOutRecord():      # DC 11.28 
+    for sensor in Lib.sensors:
+        # sensor.avg() = sensor.value.sum / sensor.value.count
+        # Min & max values are up to date per accumulateValues() above
+        sensor.avg()
+    # Number of samples = sensorX.count where sensorX is e.g. TC1
+    # Increment record number integer
+    # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
+    # Place data values in record string (see xlsx file for list of parameters)
+    # Build string for output to file, using sensor.avg, sensor.min, 
+    #  sensor.max values 
+    # Write string to file - probably want a file write function in library?
+    # Must clear all accumulated values when a record is closed out: 
+    for sensor in Lib.sensors:
+        sensor.value.clear()                 
+    
+def write1secRecord():      # DC 11.28 
+    # When writing 1-second records, we simply write sensor.currentvalue 
+    #  to the data record 
+    # Number of samples = 1
+    # Increment record number integer
+    # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
+    # Place data values in record string (see xlsx file for list of parameters)
+    # Min and max values will simply be set to the single parameter value
+    # Append record string to file
+    # Clear accumulator objects (may not be necessary)
+    pass
+
+
+
 class Mon(object):
     """the combustion monitor"""
     State1Start = 1
@@ -236,7 +294,10 @@ class Mon(object):
 
     def getstate(self): return self.__state
     def setstate(self, value): 
-        self.__prevState = self.__state
+        # DC 11.28 the line below can't be used as code is written; we must  
+        #  capture prev state once (at top of scan), and not allow it to be re-set 
+        #  during state selection process
+        # self.__prevState = self.__state   # DC 11.28         
         self.__state = value
         pass
     def delstate(self): del self.__state
@@ -277,9 +338,10 @@ while True:
     #print("time at top of loop: {}".format(tick))
 
     ## Scan all inputs
-    fetchTemps() ## commented for DBG
+    fetchTemps() 
     fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
-
+    
+    #This following for loop for DBG    
     for mux in range(Lib.Adc.NMUX):
         for sensor in Lib.sensors:
             if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
@@ -293,10 +355,8 @@ while True:
             sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
     #print "Pressure is: {}".format(fetchPressure()) #read full 25 samples
     
-    #One debug output for a TC:
-    #for sensor in Lib.tcs:
-    #    if sensor.name=="TC1@U11":
-    #        print("TC1@U11 reads: {}".format(sensor.getMostRecentValue()))
+    # DC 11.28 replace fetchTemps() with:    
+    # fetchI2cInputs()    
                 
     #for burner in Lib.burners:
     #    burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
@@ -308,6 +368,16 @@ while True:
     fmode = f.mode()
     print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
             .format(tick, f.tc.getMostRecentValue(), f.status(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
+    whmode = Lib.Burner.Mode5Off #wh.mode() ## TODO
+    fmode = Lib.Burner.Mode5Off #f.mode() ## TODO
+
+    # DC we need to capture previous state before entering the state-setting routine
+    mon.setprevState(mon.__state)   # DC 11.28 is this correct?
+
+    if False:
+        print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
+                .format(tick, f.tc.getMostRecentValue(), f.status(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
+
 
     ## Assign monitoring system state [these need to be re-checked thoroughly--TimC]
     if ((whmode == Lib.Burner.Mode2On) or (fmode == Lib.Burner.Mode2On)): 
@@ -347,6 +417,34 @@ while True:
     ## Set valve and pump control ports to state required for following scan
 
     ## Record control
+    # DC 11.28 Start new code for Record Control
+    # Is "tick" the current time to 1 sec resolution?
+    # Create "lastRecordTime" in seconds
+    
+    # Define 2 lists for state tests:
+    prev_state_60sec = [5,6]      # Monitoring states with 60-sec record interval
+    current_state_1sec   = [1,2,3,4]  # Monitoring states with 1-sec record interval
+    
+    # Check triggers for closing out a 60-sec record
+    if ((mon.prevstate in prev_state_60sec) and ((math.trunc(tick) % 60) == 0)): 
+        closeOutRecord()    ## close out accumulated record
+    # Check for any record period reaching nominally 120 sec, regardless of state    
+    elif ((tick - lastRecordTime) >= 120):
+        closeOutRecord()     
+    # Finally, check for a state change into 1-sec data collection    
+    elif ((mon.prevstate in prev_state_60sec) and (mon.state in current_state_1sec)):
+        closeOutRecord()     
+
+        
+    # Check current state; either write 1-sec record or accumulate values
+    # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
+    #  a single scan.
+    if (mon.state in current_state_1sec):
+        write1secRecord()
+    else:
+        accumulateValues()    # Accumulate values only when not currently in 1-sec
+    
+    # DC 11.28 End of new code
 
 
     ## Diagnostic record control
@@ -368,7 +466,7 @@ while True:
     Lib.Timer.sleep()
     pass
     
-  except KeyboardInterrupt: #NOTE This is for debug (allows xbee halt and serial cleanup)
+  except KeyboardInterrupt: #DBG This is for debug (allows xbee halt and serial cleanup)
     break
 #cleanup 
 xbee.halt()

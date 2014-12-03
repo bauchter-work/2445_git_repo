@@ -8,7 +8,11 @@
 ## 2014-11-16 TimC - imported smbus; modified hierarchy; pushed many globals into classes; added burner code; using sleep v. signal in timer
 ## 2014-11-17 TimC - ...
 ## 2014-11-18 TimC - fix burner.status (was state); imported GPIO and upgraded Gpi and Gpo
+## 2014-11-23 TimC - changed default PGA from 1 to 1024; added use flag to Tc; fix the self-repair of sps and pga in Adc.startAdc(); I2c.errMsg now throws exception; assume both smbuses; switch to new print function 
 ## 2014-11-24 BenA - added pressure read detail to dlvr
+##
+
+from __future__ import print_function
 
 import signal, time, gc
 from datetime import datetime
@@ -22,11 +26,11 @@ import Adafruit_BBIO.GPIO as GPIO
 class I2c(object):
     """includes all I2C(SMBus)-attached objects"""
 
-    I2C1 = 2 
+    I2C1 = 0
     I2C2 = 1
-    NI2C = 3
+    NI2C = 2
 
-    smbuses = [SMBus(0), SMBus(1), SMBus(2)]
+    smbuses = [SMBus(2), SMBus(1)]
 
     debug = False
 
@@ -38,15 +42,15 @@ class I2c(object):
         pass
 
     def errMsg(self, err):
-        print "Error accessing 0x%02X: Check your I2C address" % self.addr
-        return -1
+        print("I2c[{}]: Error accessing 0x{:02x}: Check your I2C address".format(self.i2c, self.addr))
+        raise err ## was return -1
 
     def write8(self, reg, datum):
         "Writes an 8-bit datum to the specified register/address"
         try:
             self.bus.write_byte_data(self.addr, reg, datum)
             if self.debug:
-                print "I2c: Wrote 0x%02X to address 0x%02x register 0x%02X" % (datum, self.addr, reg)
+                print("I2c: Wrote 0x{:02x} to address 0x{:02x} register 0x{:02x}".format(datum, self.addr, reg))
         except IOError, err:
             return self.errMsg(err)
 
@@ -55,7 +59,7 @@ class I2c(object):
         try:
             self.bus.write_word_data(self.addr, reg, datum)
             if self.debug:
-                print ("I2c: Wrote 0x%02X to address 0x%02x register pair 0x%02X,0x%02X" % (datum, self.addr, reg, reg+1))
+                print("I2c: Wrote 0x{:02x} to address 0x{:02x} register pair 0x{:02x},0x{:02x}".format(datum, self.addr, reg, reg+1))
         except IOError, err:
             return self.errMsg(err)
 
@@ -63,7 +67,10 @@ class I2c(object):
         "Writes an array of bytes using I2C format"
         try:
             if self.debug:
-                print "I2c: Writing data to register 0x%02X:" % reg, data
+                print("I2c[{}]: Writing data to address 0x{:02x} at register 0x{:02x}: ".format(self.i2c, self.addr, reg), end='')
+                for index in range(len(data)):
+                    print(" 0x{:02x}".format(data[index]), end='')
+                print()
             self.bus.write_i2c_block_data(self.addr, reg, data)
         except IOError, err:
             return self.errMsg(err)
@@ -71,10 +78,13 @@ class I2c(object):
     def readList(self, reg, length):
         "Read a array of bytes from the I2C device"
         try:
-            results = self.bus.read_i2c_block_data(self.addr, reg, length)
+            data = self.bus.read_i2c_block_data(self.addr, reg, length)
             if self.debug:
-                print ("I2c: Device 0x%02X returned the following from reg 0x%02X" % (self.addr, reg, results))
-            return results
+                print("I2c[{}]: Reading data from address 0x{:02x} at register 0x{:02x}: ".format(self.i2c, self.addr, reg), end='')
+                for index in range(len(data)):
+                    print(" 0x{:02x}".format(data[index]), end='')
+                print()
+            return data
         except IOError, err:
             return self.errMsg(err)
 
@@ -83,7 +93,7 @@ class I2c(object):
         try:
             result = self.bus.read_byte_data(self.addr, reg)
             if self.debug:
-                print ("I2C: Device 0x%02X returned 0x%02X from reg 0x%02X" % (self.addr, result & 0xFF, reg))
+                print("I2C: Device 0x{:02x} returned 0x{:02x} from reg 0x{:02x}".format(self.addr, result & 0xFF, reg))
             return result
         except IOError, err:
             return self.errMsg(reg)
@@ -94,7 +104,7 @@ class I2c(object):
             result = self.bus.read_byte_data(self.addr, reg)
             if result > 127: result -= 256
             if self.debug:
-                print ("I2C: Device 0x%02X returned 0x%02X from reg 0x%02X" % (self.addr, result & 0xFF, reg))
+                print("I2C: Device 0x{:02x} returned 0x{:02x} from reg 0x{:02x}".format(self.addr, result & 0xFF, reg))
             return result
         except IOError, err:
             return self.errMsg(err)
@@ -108,7 +118,7 @@ class I2c(object):
             if not little_endian:
                 result = ((result << 8) & 0xFF00) + (result >> 8)
             if (self.debug):
-                print "I2C: Device 0x%02X returned 0x%04X from reg 0x%02X" % (self.addr, result & 0xFFFF, reg)
+                print("I2C: Device 0x{:02x} returned 0x{:04x} from reg 0x{:02x}".format(self.addr, result & 0xFFFF, reg))
             return result
         except IOError, err:
             return self.errMsg(err)
@@ -122,7 +132,7 @@ class I2c(object):
         except IOError, err:
             return self.errMsg(err)
 
-PGA = 1024 
+PGA = 1024
 SPS = 250
 
 class Adc(I2c):
@@ -230,7 +240,7 @@ class Adc(I2c):
       2400:__ADS1015_REG_CONFIG_DR_2400SPS,
       3300:__ADS1015_REG_CONFIG_DR_3300SPS
     }
-    # Dictionariy with the programable gains
+    # Dictionary with the programable gains
     pgaADS1x15 = {
       6144:__ADS1015_REG_CONFIG_PGA_6_144V,
       4096:__ADS1015_REG_CONFIG_PGA_4_096V,
@@ -273,14 +283,18 @@ class Adc(I2c):
         if (self.ic == Adc.__IC_ADS1015):
             config |= Adc.spsADS1015.setdefault(sps, Adc.__ADS1015_REG_CONFIG_DR_1600SPS)
         else:
-            if ( (sps not in Adc.spsADS1115) and self.debug): ## was wrongly using '&' v. 'and'           
-                print "ADS1x15: Invalid sps specified: %d, using 250" % sps     ## was wrong message
+            if ( (sps not in Adc.spsADS1115) ): ## was wrongly using '&' v. 'and'; also, did not correct the value unless debug was on
+                if (self.debug):
+                    print("ADS1x15: Invalid sps specified: {}, using 250".format(sps))## was wrong message
+                sps = 250 ## this set was missing in Adafruit
             config |= Adc.spsADS1115.setdefault(sps, Adc.__ADS1115_REG_CONFIG_DR_250SPS)
         self.sps = sps ## save for fetchResult
       
         # Set PGA/voltage range, defaults to +-6.144V
-        if ( (pga not in Adc.pgaADS1x15) and self.debug): ## was wrongly using '&' v. 'and' 
-            print "ADS1x15: Invalid pga specified: %d, using 6144mV" % sps     
+        if ( (pga not in Adc.pgaADS1x15) ): ## was wrongly using '&' v. 'and'; also, did not correct the value unless debug was on
+            if (self.debug):
+                print("ADS1x15: Invalid pga specified: {}, using 6144mV".format(pga))
+            pga = 6144 ## this set was missing in Adafruit
         config |= Adc.pgaADS1x15.setdefault(pga, Adc.__ADS1015_REG_CONFIG_PGA_6_144V)
         self.pga = pga ## save for fetchResult
         
@@ -315,11 +329,16 @@ class Adc(I2c):
         else:
             # Return a mV value for the ADS1115
             # (Take signed values into account as well)
-            val = (result[0] << 8) | (result[1])
-            if val > 0x7FFF:
-                return (val - 0xFFFF)*self.pga/32768.0
-            else:
-                return ( (result[0] << 8) | (result[1]) )*self.pga/32768.0
+            try:
+                val = (result[0] << 8) | (result[1])
+                if val > 0x7FFF:
+                    return (val - 0xFFFF)*self.pga/32768.0
+                else:
+                    return ( (result[0] << 8) | (result[1]) )*self.pga/32768.0
+            except TypeError, err:
+                print("fetchAdc result \"{}\"  error: {}".format(result, err))
+                return 0
+
         pass
 
     U11 = 0
@@ -357,7 +376,7 @@ adcs = [
 ######################################################
 ## sensors and values
 
-NaN = Decimal('NaN')
+NaN = float('NaN')
 
 VLEN = 10
 
@@ -389,13 +408,18 @@ sensors = []
 class Ain(Sensor):
     """includes all (ADC-attached) analog inputs"""
 
-    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS):
+    def __init__(self, name, adcIndex, mux, use=True, pga=PGA, sps=SPS):
         Sensor.__init__(self, name)
         self.adcIndex = adcIndex
         self.adc = adcs[adcIndex]
         self.mux = mux
+        self.use = use
         self.pga = pga
         self.sps = sps
+        pass
+
+    def appendAdcValue(self, value):
+        self.appendValue(value)
         pass
 
 ains = []
@@ -403,12 +427,12 @@ ains = []
 class Tc(Ain):
     """includes all (ADC-attached) AD8495-type thermocouple sensor inputs"""
 
-    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS):
-        Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
+    def __init__(self, name, adcIndex, mux, use=True, pga=PGA, sps=SPS):
+        Ain.__init__(self, name, adcIndex, mux, use, pga, sps)
         pass
 
-    def appendAdcValue(self, value):
-        value = value ## convert to temp
+    def appendAdcValue(self, value): ## override
+        value = value ## TODO convert to temp
         self.appendValue(value)
         pass
 
@@ -430,7 +454,7 @@ tcs = [
 
         Tc("TC13@U15", Adc.U15, Adc.MUX0),
         Tc("TC14@U15", Adc.U15, Adc.MUX1),
-        Tc("TC15@U15", Adc.U15, Adc.MUX2),
+        Tc("TC15@U15", Adc.U15, Adc.MUX2), ## TODO
         Tc("TC16@U15", Adc.U15, Adc.MUX3), ## spare tc
     ]
 
@@ -456,14 +480,15 @@ co   = CO("JP1-D@U8", Adc.U8, Adc.MUX3) ## CO sensor
 co2  = CO2("J25-1@U9", Adc.U9, Adc.MUX0) ## CO2 sensor
 niu1 = Ain("J25-2@U9", Adc.U9, Adc.MUX1) ## unused ain
 niu2 = Ain("J25-3@U9", Adc.U9, Adc.MUX2) ## unused ain
-battery = Ain("J25-4@U9", Adc.U9, Adc.MUX3) ## battery voltage sensor
+batt = Ain("J25-4@U9", Adc.U9, Adc.MUX3) ## battery voltage sensor
 
 niu3 = Ain("J25-5@U10", Adc.U10, Adc.MUX0) ## spare ain
 niu4 = Ain("J25-6@U10", Adc.U10, Adc.MUX1) ## spare ain
 niu5 = Ain("J25-7@U10", Adc.U10, Adc.MUX2) ## spare ain
 niu6 = Ain("J25-8@U10", Adc.U10, Adc.MUX3) ## spare ain
 
-ains.extend([door, fan1, fan2, co, co2, niu1, niu2, battery, niu3, niu4, niu5, niu6])
+ains.extend([door, fan1, fan2, co, co2, niu1, niu2, batt, niu3, niu4, niu5, niu6])
+
 sensors.extend(ains)
 
 class Dlvr(I2c, Sensor):
@@ -638,10 +663,11 @@ class Burner(object):
         prev = self.tc.getPreviousValue()
         if (prev != NaN):
             last = self.tc.getMostRecentValue()
+            print("last: {} {}  prev: {} {}".format(type(last), last, type(prev), prev))
             diff = last - prev
-            if (diff > 9):
+            if (diff > 9): ## TODO
                 mode = Burner.Mode1JustStarted 
-            elif (diff < -9):
+            elif (diff < -9): ## TODO
                 mode = Burner.Mode3JustStopped
                 self.stopTime = time.time()
             elif (self.isOn()):
