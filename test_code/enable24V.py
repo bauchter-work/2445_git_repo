@@ -10,11 +10,11 @@ pins = ["P8_15"]
 for x in pins:
 	GPIO.setup(x, GPIO.OUT)
 
-for x in pins:
-  print "setting output high ", x
-  GPIO.output(x, GPIO.HIGH)
 
 while (True):
+    for x in pins:
+        #print "setting output high ", x
+        GPIO.output(x, GPIO.HIGH)
     time.sleep(5)
 
 GPIO.cleanup()  #Sets all configured pins in this program back to being inputs.

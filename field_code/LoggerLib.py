@@ -535,22 +535,22 @@ class Rtc(I2c):
 rtc = Rtc("RTC@U4", I2c.I2C1)
 #sensors.extend([rtc]) ## not a sensor
 
-UART4 = 4
-
-class Sio(Sensor):
-    """includes all SIO-attached sensor inputs"""
-    def __init__(self, name, uart):
+class Xbee(Sensor):
+    """includes all XBEE wireless linked sensor nodes"""
+    def __init__(self, name, adcIndex,address,use=True):
         Sensor.__init__(self, name)
-        self.uart = uart
+        self.name = name
+        self.adcIndex = adcIndex
+        self.adc = "adc-"+str(adcIndex+1)
+        self.address = address
+        self.use = use
         pass
 
-class Xbee(Sio):
-    """includes all XBEE-attached sensor inputs"""
-    def __init__(self, name, uart):
-        Sio.__init__(self, name, uart)
+    def appendAdcValue(self, value):
+        self.appendValue(value)
         pass
 
-xbee = Xbee("XBEE@UART4", UART4) ## P9-11, 13 Rx Tx
+xbee = []  #these are to be defined in LoggerMain from LoggerConfig values 
 sensors.extend([xbee])
 
 P8_7 = 7

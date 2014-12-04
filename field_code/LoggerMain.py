@@ -43,7 +43,6 @@ except:
 # Load Configuration File
 try: 
     import LoggerConfig as Conf
-    siteName = Conf.siteName
 
 except:
     print "No LoggerConfig.py file available or error parsing"
@@ -114,24 +113,27 @@ def get_free_space_bytes(folder):
     return st.f_bavail * st.f_frsize
     pass
 
-def print_xbee(data):
+def fetchXbee(data):
     try:
         print("Xbee data Received")
-        for item in data:
-            #print "item is",str(item)
-            if (str(item) == 'source_addr_long') or (str(item) == 'source_addr'):
-                if str(item) == 'source_addr_long':
-                    print '\t'+str(item),data[item].encode("hex")[12:16]
-
-            elif str(item) == 'samples':
-                samplesDict = data[item]
-                for x in samplesDict:
-                    for y in x: 
-                        if y[0:3] == "adc":
-                            print '\t'+str(y),x[y]
-            #else:
-                #print(item),
-                #print(data[item])
+        for sensor in Lib.sensors:
+            if isinstance(sensor, Lib.Xbee):
+                matchAddress = False
+                for item in data:
+                    #print "item is",str(item)
+                    if (str(item) == 'source_addr_long'):
+                        #print '\t'+str(item),data[item].encode("hex")[12:16]
+                        #print "addr_long is:",str(data[item].encode("hex")[12:16])
+                        if ("0x"+str(data[item].encode("hex")[12:16])) == sensor.address:
+                            matchAddress = True
+                            #print "\tThere is a match",sensor.address
+                    elif str(item) == 'samples':
+                        samplesDict = data[item]
+                        for x in samplesDict:
+                            for y in x: 
+                                if matchAddress and str(y) == str(sensor.adc):
+                                    #print '\t'+str(y),x[y],sensor.adc
+                                    sensor.appendValue(x[y])
     except:
         print ("unable to print or parse xbee data")
     pass
@@ -308,7 +310,13 @@ class Mon(object):
 ## start main
 #############
 #setup Xbee (must be after def of print_xbee)
-xbee = zigbee.ZigBee(ser,callback=print_xbee)
+xbee = zigbee.ZigBee(ser,callback=fetchXbee)  # for uart4 xbee coordinator
+for x in range(len(Conf.xBeeNodes)):  # for each xbee end node in the network
+    nodeAddress = Conf.xBeeNodes[x]
+    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=0,address=nodeAddress,use=True)   #adc-1
+    Lib.sensors.extend([xbeeTemp])
+    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=1,address=nodeAddress,use=True)   #adc-2
+    Lib.sensors.extend([xbeeTemp])
 
 Lib.Adc.debug = False
 AdaAdcU11 = ADS1x15(ic=ADS1115,address=0x48,busnum=2)
@@ -351,12 +359,11 @@ while True:
     
     #Read Pressure sensor check
     for sensor in Lib.sensors:
-        if sensor.name == "DLVR@U12":
+        if isinstance(sensor, Lib.Dlvr):
             sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
-    #print "Pressure is: {}".format(fetchPressure()) #read full 25 samples
-    
-    # DC 11.28 replace fetchTemps() with:    
-    # fetchI2cInputs()    
+        #    print "Pressure is: {}".format(sensor.getMostRecentValue()) 
+        #if isinstance(sensor, Lib.Xbee):
+        #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getMostRecentValue())
                 
     #for burner in Lib.burners:
     #    burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
