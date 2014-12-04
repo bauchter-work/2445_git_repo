@@ -9,7 +9,8 @@ siteName = "bbbMPLS"        #Give your site a unique Name (this will be embedded
 			                #This name is correlated to a unique hardware attribute
 waterHeaterIsPresent = True #True or False - update if present
 furnaceIsPresent = True     #True or False
-
+xBeeNodes = ["0x6dfe"]        #Declare End Node addresses for deployed xBee sensors (last 4 hex digits 
+                            #  in the long address of the xbee.
 
 savePath = "/root/uSDcard/data/" #location to store data on BBB
 

@@ -8,13 +8,16 @@
 ## 2014-11-18 TimC - changed mon.state to property, added prevState; cleanup state selection; added example gpio get
 ## 2014-11-20 BenA - sidestepping some issues with the ADC library for now; using Adafruit library until understood
 ## 2014-11-24 BenA - added watchdog, config file query, uniqueID, gpio setup, pressure read
+## 2014-11-30 DanC - added material related to record control and fetching data values
 ## 2014-11-30 TimC - accomodate new i2c exceptions; remove random; init burners as off
+##
 
 import time, math, sys, os
 from decimal import *
 import LoggerLib as Lib
 from Adafruit_ADS1x15_mod import ADS1x15 
-from xbee import XBee
+import Adafruit_BBIO.UART as UART
+from xbee import zigbee
 import serial
 
 
@@ -40,7 +43,6 @@ except:
 # Load Configuration File
 try: 
     import LoggerConfig as Conf
-    siteName = Conf.siteName
 
 except:
     print "No LoggerConfig.py file available or error parsing"
@@ -57,14 +59,9 @@ for control in Lib.controls:
     if control.name == "24V@P8-15":
         control.setValue(1) #write GPIO.HIGH
 
-#TODO Setup/clear UART buffer?
-ser = serial.Serial(port="/dev/tty4",baudrate=9600, timeout=1)
-#xbee = XBee(ser)
-for index in range(3): #while True:
-    try:
-        print ("xbee reads: {}".format(ser.read(100)))
-    except KeyboardInterrupt:
-        break
+#Setup zigbee UART for asynchronous operation
+UART.setup("UART4")
+ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1)
 
 ## set furnace and waterhtr TCs
 if True:
@@ -108,6 +105,7 @@ if False: ## TODO: needs update
 
 ###########################################################################################
 ## local functions
+# ==============================================================================
 
 def get_free_space_bytes(folder):
     #command to check remaining free space on the storage device
@@ -115,10 +113,33 @@ def get_free_space_bytes(folder):
     return st.f_bavail * st.f_frsize
     pass
 
-def fetchCO2():
+def fetchXbee(data):
+    try:
+        print("Xbee data Received")
+        for sensor in Lib.sensors:
+            if isinstance(sensor, Lib.Xbee):
+                matchAddress = False
+                for item in data:
+                    #print "item is",str(item)
+                    if (str(item) == 'source_addr_long'):
+                        #print '\t'+str(item),data[item].encode("hex")[12:16]
+                        #print "addr_long is:",str(data[item].encode("hex")[12:16])
+                        if ("0x"+str(data[item].encode("hex")[12:16])) == sensor.address:
+                            matchAddress = True
+                            #print "\tThere is a match",sensor.address
+                    elif str(item) == 'samples':
+                        samplesDict = data[item]
+                        for x in samplesDict:
+                            for y in x: 
+                                if matchAddress and str(y) == str(sensor.adc):
+                                    #print '\t'+str(y),x[y],sensor.adc
+                                    sensor.appendValue(x[y])
+    except:
+        print ("unable to print or parse xbee data")
     pass
 
-def fetchTempsAdafruit(ADCs):
+
+def fetchTempsAdafruit(ADCs): #TODO remove this function once fetchTemps() is verified sound
     for mux in range(4):
         for job in range(2): ##[Start, fetch]
             for ADC in ADCs:
@@ -134,20 +155,19 @@ def fetchTempsAdafruit(ADCs):
                          and (sensor.adc.addrs[sensor.adcIndex] == ADC.address) \
                          and (sensor.mux == mux):
                             if (sensor.name == "TC15@U15") or (sensor.name == "TC16@U15"):
-                                result = (360*(Volts-0.5))+32 #for deg. F
-                                #print sensor.name, "reads ", result, "F"
+                                result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
+                                #print sensor.name, "reads ", result, "F. 0.5V BIASED"
                                 #print "I2C Address: ",sensor.adc.addrs[sensor.adcIndex],"AIN:",sensor.mux
                             else:
                                 result = (360*Volts)+32 #for deg. F, 0V bias
-                                #print sensor.name, "reads ", ((360*(Volts))+32), "F"
+                                #print sensor.name, "reads ", result, "F"
                                 #print("I2C Address: 0x{:02x}, AIN: {},I2Cindex: {}" \
                                 #  .format(sensor.adc.addrs[sensor.adcIndex],sensor.mux, sensor.adc.i2cIndex))
                             #result = random.random() * 200.0 ## DBG
                             sensor.appendAdcValue(result)
     pass
 
-def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unreliable Data)
-    print "##############################################################################"
+def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify reliable Data
     for mux in range(Lib.Adc.NMUX):
         for job in range(3): ## [ start, sleep, fetch ]
             for sensor in Lib.ains:
@@ -162,16 +182,28 @@ def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unre
                             adc.startTime = time.time() ## really needed?
                     elif (job == 1): ## sleep
                         elapsed = time.time() - adc.startTime 
-                        adctime = (1.0 / adc.sps) + .001 
+                        adctime = (1.0 / adc.sps) + .072 
                         if (elapsed < adctime):
                             #print("fetching 0x{:02x} too early: at {} sps delay should be {} but is {}"\
                             #        .format(adc.addr, sensor.sps, adctime, elapsed))
                             time.sleep(adctime - elapsed + .002)
                     else: #if (job == 2): ## fetch
                         try:
-                            result = adc.fetchAdc()
-                            #print("{} \tResult: {}V, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
-                            #	.format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+                            Value = adc.fetchAdc()
+                            Volts = Value/1000
+                            if sensor.name[0:2] == "TC":
+                                #print("this is a TC."),  #DBG
+                                if (sensor.name == "TC15@U15") or (sensor.name=="TC16@U15"):
+                                    result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
+                                else:
+                                    result = (360*Volts)+32 #for deg. F
+                                #print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
+                                #    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+                            else:
+                                #print("this is not a TC."),  #DBG
+                                result = Value #TODO conversions?
+                                #print("{} \tResult: {}mV"\
+                                #    .format(sensor.name,result))
                             sensor.appendAdcValue(result)
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
@@ -180,6 +212,12 @@ def fetchTemps():    #NOTE DO NOT USE RIGHT NOW (will execute, but Provides Unre
     ## print in initial order
     for sensor in Lib.ains:
         print("sensor: {}  sps: {}  pga: {}  result: {}".format(sensor.name, adc.sps, adc.pga, sensor.getMostRecentValue()))
+    pass
+
+# DC 11.28 also need to do:  
+# When done with DLVR reads, calculate average and range within the values
+# Pressure sensor reads might be interleaved with i2c adc reads above, or
+#  might be a separate function.
 
 def fetchPressure():
     #Read Pressure sensor check
@@ -208,6 +246,48 @@ def fetchPressure():
     return pressureAvg
     pass
 
+# DC 11.28 New functions for building and writing records
+
+def accumulateValues():       # DC 11.28 
+    for sensor in Lib.sensors:
+        sensor.value.sum(sensor.currentvalue)  # Add current val to running sum
+        sensor.value.min(sensor.currentvalue)  # Compare current val to running min
+        sensor.value.max(sensor.currentvalue)  # Compare curr ent val to running max
+        sensor.value.count(sensor.currentvalue) # Track number of values for avg calc 
+        # OR, accumulate values over the ~60 sec period, 
+        #  and do the arithmetic at end of period:
+        sensor.appendAdcValue(sensor.currentvalue) 
+
+def closeOutRecord():      # DC 11.28 
+    for sensor in Lib.sensors:
+        # sensor.avg() = sensor.value.sum / sensor.value.count
+        # Min & max values are up to date per accumulateValues() above
+        sensor.avg()
+    # Number of samples = sensorX.count where sensorX is e.g. TC1
+    # Increment record number integer
+    # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
+    # Place data values in record string (see xlsx file for list of parameters)
+    # Build string for output to file, using sensor.avg, sensor.min, 
+    #  sensor.max values 
+    # Write string to file - probably want a file write function in library?
+    # Must clear all accumulated values when a record is closed out: 
+    for sensor in Lib.sensors:
+        sensor.value.clear()                 
+    
+def write1secRecord():      # DC 11.28 
+    # When writing 1-second records, we simply write sensor.currentvalue 
+    #  to the data record 
+    # Number of samples = 1
+    # Increment record number integer
+    # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
+    # Place data values in record string (see xlsx file for list of parameters)
+    # Min and max values will simply be set to the single parameter value
+    # Append record string to file
+    # Clear accumulator objects (may not be necessary)
+    pass
+
+
+
 class Mon(object):
     """the combustion monitor"""
     State1Start = 1
@@ -228,7 +308,10 @@ class Mon(object):
 
     def getstate(self): return self.__state
     def setstate(self, value): 
-        self.__prevState = self.__state
+        # DC 11.28 the line below can't be used as code is written; we must  
+        #  capture prev state once (at top of scan), and not allow it to be re-set 
+        #  during state selection process
+        # self.__prevState = self.__state   # DC 11.28         
         self.__state = value
         pass
     def delstate(self): del self.__state
@@ -238,6 +321,15 @@ class Mon(object):
 #############
 ## start main
 #############
+#setup Xbee (must be after def of print_xbee)
+xbee = zigbee.ZigBee(ser,callback=fetchXbee)  # for uart4 xbee coordinator
+for x in range(len(Conf.xBeeNodes)):  # for each xbee end node in the network
+    nodeAddress = Conf.xBeeNodes[x]
+    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=0,address=nodeAddress,use=True)   #adc-1
+    Lib.sensors.extend([xbeeTemp])
+    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=1,address=nodeAddress,use=True)   #adc-2
+    Lib.sensors.extend([xbeeTemp])
+
 Lib.Adc.debug = False
 AdaAdcU11 = ADS1x15(ic=ADS1115,address=0x48,busnum=2)
 AdaAdcU13 = ADS1x15(ic=ADS1115,address=0x49,busnum=2) 
@@ -253,31 +345,37 @@ f = Lib.furnace
 mon = Mon()
 
 ## determine the current state
-#fetchTemps()
+fetchAdcInputs()
 fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15]) #grab all ADC inputs from TC ADCs 
 
 ## main loop
 Lib.Timer.start()
 Lib.Timer.sleep()
 while True:
+  try:  #NOTE this is for debug, except Keyboard Interrupt 
     ## Capture time at top of second
     tick = Lib.Timer.stime()
     #print("time at top of loop: {}".format(tick))
 
     ## Scan all inputs
-    fetchTemps() ## commented for DBG
+    fetchAdcInputs() 
     fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
+    
+    #This following for loop for DBG    
+    for mux in range(Lib.Adc.NMUX):
+        for sensor in Lib.sensors:
+            if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
+                if (sensor.getMostRecentValue()-sensor.getPreviousValue())>4:
+                    print "Temp difference for {} is {}F".format(sensor.name,(sensor.getMostRecentValue()-\
+                      sensor.getPreviousValue()))
     
     #Read Pressure sensor check
     for sensor in Lib.sensors:
-        if sensor.name == "DLVR@U12":
+        if isinstance(sensor, Lib.Dlvr):
             sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
-    #print "Pressure is: {}".format(fetchPressure()) #read full 25 samples
-    
-    #One debug output for a TC:
-    #for sensor in Lib.tcs:
-    #    if sensor.name=="TC1@U11":
-    #        print("TC1@U11 reads: {}".format(sensor.getMostRecentValue()))
+        #    print "Pressure is: {}".format(sensor.getMostRecentValue()) 
+        #if isinstance(sensor, Lib.Xbee):
+        #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getMostRecentValue())
                 
     #for burner in Lib.burners:
     #    burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
@@ -290,6 +388,9 @@ while True:
     if False:
         print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
                 .format(tick, f.tc.getMostRecentValue(), f.status(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
+
+    # DC we need to capture previous state before entering the state-setting routine
+    #mon.setprevState(mon.getstate())   # DC 11.28 is this correct?
 
     ## Assign monitoring system state [these need to be re-checked thoroughly--TimC]
     if ((whmode == Lib.Burner.Mode2On) or (fmode == Lib.Burner.Mode2On)): 
@@ -330,6 +431,34 @@ while True:
     ## Set valve and pump control ports to state required for following scan
 
     ## Record control
+    # DC 11.28 Start new code for Record Control
+    # Is "tick" the current time to 1 sec resolution?
+    # Create "lastRecordTime" in seconds
+    
+    # Define 2 lists for state tests:
+    prev_state_60sec = [5,6]      # Monitoring states with 60-sec record interval
+    current_state_1sec   = [1,2,3,4]  # Monitoring states with 1-sec record interval
+    
+    ## Check triggers for closing out a 60-sec record  ##TODO
+    #if ((mon.prevstate in prev_state_60sec) and ((math.trunc(tick) % 60) == 0)): 
+    #    closeOutRecord()    ## close out accumulated record
+    ## Check for any record period reaching nominally 120 sec, regardless of state    
+    #elif ((tick - lastRecordTime) >= 120):
+    #    closeOutRecord()     
+    ## Finally, check for a state change into 1-sec data collection    
+    #elif ((mon.prevstate in prev_state_60sec) and (mon.state in current_state_1sec)):
+    #    closeOutRecord()     
+
+        
+    # Check current state; either write 1-sec record or accumulate values
+    # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
+    #  a single scan.  :TODO
+    #if (mon.state in current_state_1sec):
+    #    write1secRecord()
+    #else:
+    #    accumulateValues()    # Accumulate values only when not currently in 1-sec
+    
+    # DC 11.28 End of new code
 
 
     ## Diagnostic record control
@@ -350,4 +479,9 @@ while True:
 
     Lib.Timer.sleep()
     pass
-
+    
+  except KeyboardInterrupt: #DBG This is for debug (allows xbee halt and serial cleanup)
+    break
+#cleanup 
+xbee.halt()
+ser.close()
