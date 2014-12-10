@@ -10,6 +10,7 @@
 ## 2014-11-18 TimC - fix burner.status (was state); imported GPIO and upgraded Gpi and Gpo
 ## 2014-11-24 BenA - added pressure read detail to dlvr
 ## 2014-11-30 TimC - added use flag to Tc; improve the self-repair of sps and pga in Adc.startAdc(); I2c.errMsg now throws exception; assume both smbuses; switch to new print function; switch NaN to float 
+## 2014-12-09 TimC - added sensor stat methods; added param classes for record control; added burnertc subclass for moving averages; brought in config; improved burner status and mode calculations
 ##
 
 from __future__ import print_function
@@ -19,6 +20,7 @@ from datetime import datetime
 from decimal import * ## https://docs.python.org/2/library/decimal.html
 from smbus import SMBus
 import Adafruit_BBIO.GPIO as GPIO
+import LoggerConfig as Conf
 
 ######################################################
 ## buses, chips and protocols
@@ -377,8 +379,6 @@ adcs = [
 
 NaN = float('NaN')
 
-VLEN = 10
-
 class Sensor(object):
     """includes all sensor inputs"""
 
@@ -388,19 +388,33 @@ class Sensor(object):
         self.values = list() ## https://docs.python.org/2/library/stdtypes.html#typesseq-mutable 
         pass
 
-    def appendValue(self, value):
-        self.values.extend([value])
-        while (len(self.values) > VLEN):
-            del(self.values[0])
+    def clearValues():
+        self.values = list()
         pass
 
-    def getMostRecentValue(self):
+    def appendValue(self, value):
+        self.values.append(value)
+        pass
+
+    def getLastVal(self):
         return NaN if len(self.values) <= 0 else self.values[-1]
         pass
 
-    def getPreviousValue(self):
+    def getPrevVal(self):
         return NaN if len(self.values) <= 1 else self.values[-2]
         pass
+
+    def getValCnt(self):
+        return len(self.values)
+
+    def getAvgVal(self):
+        return NaN if len(self.values) <= 0 else math.fsum(self.values)/len(self.values)
+
+    def getMinVal(self):
+        return NaN if len(self.values) <= 0 else min(self.values)
+
+    def getMaxVal(self):
+        return NaN if len(self.values) <= 0 else max(self.values)
 
 sensors = []
 
@@ -458,6 +472,24 @@ tcs = [
     ]
 
 ains.extend(tcs)
+
+class BurnerTc(Tc):
+    """includes all (ADC-attached) AD8495-type thermocouple sensor inputs acquiring burner temperatures"""
+    def __init__(self, name, adcIndex, mux, use=True, pga=PGA, sps=SPS):
+        Tc.__init__(self, name, adcIndex, mux, use, pga, sps)
+        self.recent = list() ## never cleared--just truncated
+        pass
+
+    def appendValue(self, value):
+        Tc.appendValue(self, value) ## https://docs.python.org/2/tutorial/classes.html#inheritance
+        self.recent.append(value)
+        while (len(self.recent) > 10):
+            del(self.recent[0])
+        pass
+
+    def getMovAvg(self):
+        return NaN if len(self.recent) <= 0 else math.fsum(self.recent)/len(self.recent)
+
 
 class CO(Ain):
     """includes all (ADC-attached) CO sensor inputs"""
@@ -626,25 +658,41 @@ class Burner(object):
     Mode4Cooling = 4
     Mode5Off = 5
 
-    TEMP_ON = 150 ## T degrees C at or above which we assume a burner is on
-    #TEMP_OFF = 50 ## T degrees C below which we assume a burner is off
-    STATUS_ON = 1
-    STATUS_OFF = 0
+    T_WHFLUEMIN = 120 ## F
+    T_FFLUEMIN = 120 ## F
 
-    def __init__(self, name, tcIndex):
+    STATUS_ON = True
+    STATUS_OFF = False
+
+    def __init__(self, name, dtOn, dtOff, tcIndex, isPresent):
         self.name = name
+        self.dtOn = dtOn ## deg. F delta
+        self.dtOff = dtOff ## deg. F delta
         #self.tcIndex = tcIndex ## not needed--and may be overridden
         self.tc = tcs[tcIndex]
+        self.isPresent = isPresent
+        self.startTime = None
         self.stopTime = None
+        self.status = Burner.STATUS_OFF
+        self.prevStatus = None
+        self.mode = None
+        self.prevMode = None
         pass
 
-    def isOn(self):
-        ## i.e. (last >= TEMP_ON):
-        last = self.tc.getMostRecentValue()
-        return (last != NaN and last >= Burner.TEMP_ON)
+    def calcStatus(self):
+        self.prevStatus = self.status
+        last = self.tc.getLastVal()
+        if (last != NaN):
+            avg = self.tc.getMovAvg()
+            if ((last - avg) > self.dtOn):
+                self.status = Burner.STATUS_ON
+            elif ((last - avg) < self.dtOff):
+                self.status = Burner.STATUS_OFF
+            #else no change
+        return self.status
 
-    def status(self):
-        return Burner.STATUS_ON if (self.isOn()) else Burner.STATUS_OFF 
+    def getStatus(self):
+        return self.status
 
     def iscooling(self):
         cooling = False
@@ -656,30 +704,56 @@ class Burner(object):
         return cooling
         pass
 
-    def mode(self):
-        """N.B. this method also sets the stopTime which is used in the calculation--must be called every tick"""
-        mode = Burner.Mode2On if (self.isOn()) else Burner.Mode5Off
-        prev = self.tc.getPreviousValue()
-        if (prev != NaN):
-            last = self.tc.getMostRecentValue()
-            print("last: {} {}  prev: {} {}".format(type(last), last, type(prev), prev))
-            diff = last - prev
-            if (diff > 9): ## TODO
-                mode = Burner.Mode1JustStarted 
-            elif (diff < -9): ## TODO
-                mode = Burner.Mode3JustStopped
-                self.stopTime = time.time()
-            elif (self.isOn()):
-                mode = Burner.Mode2On
-            elif (self.iscooling()):
-                mode = Burner.Mode4Cooling
-            else:
-                mode = Burner.Mode5Off
+    def calcMode(self):
+        """N.B. this method also sets the stopTime which is used in the calculation--must be called once and only once every tick"""
+        self.mode = Burner.Mode0NotPresent
+        if (self.isPresent):
+            self.calcStatus() ## update status
+            self.mode = Burner.Mode2On if (self.status == Burner.STATUS_ON) else Burner.Mode5Off
+            if (self.prevMode is not None):
+                if (self.prevStatus != Burner.STATUS_ON):
+                    if (self.status == Burner.STATUS_ON):
+                        self.mode = Burner.Mode1JustStarted
+                        self.startTime = now()
+                    elif (self.prevMode == Burner.Mode1JustStarted):
+                        if (self.status == Burner.STATUS_ON):
+                            self.mode = Burner.Mode2On
+                            self.timeOn = now() - self.startTime
+                        else:
+                            self.mode = Burner.Mode4Cooling
+                            ## unexpected--register an error
+                    elif (self.prevMode == Burner.Mode2On):
+                        if (self.status == Burner.STATUS_OFF):
+                            self.mode = Burner.Mode3JustStopped
+                            self.timeOn = 0.0
+                            self.stopTime = now()
+                        else:
+                            self.timeOn = now() - self.startTime
+                            ## no change in mode
+                    elif (self.prevMode == Burner.Mode3JustStopped):
+                        if (self.status == Burner.STATUS_OFF):
+                            self.mode = Burner.Mode4Cooling
+                        else:
+                            self.mode = Burner.Mode1JustStarted
+                            ## unexpected--register an error
+                    elif (self.prevMode == Burner.Mode4Cooling):
+                        if (self.status == Burner.STATUS_OFF):
+                            elapsed = math.trunc(now() - self.stopTime)
+                            if (((elapsed >= 120) and ((elapsed % 60) == 0)) or (elapsed >= 180)):
+                                self.mode = Burner.Mode5Off
+                            ## else no change in mode
+            self.prevMode = mode
         return mode
         pass
 
-furnace = Burner("furnace", 0)
-waterHtr = Burner("waterHtr", 1)
+    def getMode(self):
+        return self.mode
+
+waterHeaterIsPresent = (Conf.waterHeaterIsPresent is not None and Conf.waterHeaterIsPresent == True)
+furnaceIsPresent = (Conf.furnaceIsPresent is not None and Conf.furnaceIsPresent == True)
+
+furnace = Burner("furnace", 5, -5, 0, furnaceIsPresent)
+waterHtr = Burner("waterHtr", 5, -5, 1, waterHeaterIsPresent)
 burners = [ furnace, waterHtr ]
 
 ############################################
@@ -732,3 +806,171 @@ class Timer(object):
         return Timer.lastTick
         pass
 
+############################################
+## record parameters
+
+def TIME(tm):
+    return "{}".format(tm)
+
+class Param(object):
+    """includes all parameters to be reported"""
+
+    def __init__(self, headers, units=[""], values=[""]):
+        self.headers = headers
+        self.units = units
+        self.values = values
+
+    def reportHeaders(self):
+        return self.headers
+
+    def reportUnits(self):
+        return self.units ## len must match headers
+
+    def reportScanData(self): ## len must match headers and units
+        return self.values
+
+    def reportStatData(self): ## len must match headers and units
+        return self.values
+
+siteid = Param(["site"], [""], ["MSP___"])
+timest = Param(["time"], [""], [TIME(now())])
+recnum = Param(["rec_num"])
+
+params = [siteid, timest, recnum] ## alnum, utc, int
+
+def DEC(number):
+    return "{:d}".format(number)
+
+class SampledParam(Param):
+    """includes all sensed/sampled parameters to be reported"""
+
+    def __init__(self, headers, units, loc, sensor):
+        Param.__init__(self, headers, units)
+        self.loc = loc
+        self.sensor = sensor
+
+    def dur(self):
+        return TIME(self.sampleDuration())
+
+    def val(self):
+        return DEC(self.sensor.getLastVal())
+
+    def avgVal(self):
+        return DEC(self.sensor.getAvgVal())
+
+    def minVal(self):
+        return DEC(self.sensor.getMinVal())
+
+    def maxVal(self):
+        return DEC(self.sensor.getMaxVal())
+
+    def valCnt(self):
+        return self.sensor.getValCnt()
+
+    def other(self):
+        return "other"
+
+    def reportScanData(self): ## len must match headers and units
+        return [self.val(), self.val(), self.val()]
+
+    def reportStatData(self): ## len must match headers and units
+        return [self.avgVal(), self.minVal(), self.maxVal()]
+
+class TempParam(SampledParam):
+    """includes all TC (sampled) parameters"""
+    def __init__(self, loc, sensor):
+        SampledParam.__init__(self, [loc+"", loc+"_min", loc+"_max"], ["deg. F", "deg. F", "deg. F"], loc, sensor) 
+
+t_whburner = TempParam("t_whburner", tcs[0])
+t_whspill1 = TempParam("t_whspill1", tcs[1])
+t_whspill2 = TempParam("t_whspill2", tcs[2])
+t_whspill3 = TempParam("t_whspill3", tcs[3])
+t_whspill4 = TempParam("t_whspill4", tcs[4])
+t_whvent = TempParam("t_whvent", tcs[5])
+params.extend([t_whburner, t_whspill1, t_whspill2, t_whspill3, t_whspill4, t_whvent])
+
+t_fburner = TempParam("t_fburner", tcs[6])
+t_fspill1 = TempParam("t_fspill1", tcs[7])
+t_fspill2 = TempParam("t_fspill2", tcs[8])
+t_fspill3 = TempParam("t_fspill3", tcs[9])
+t_fspill4 = TempParam("t_fspill4", tcs[10])
+t_fvent = TempParam("t_fvent", tcs[11])
+params.extend([t_fburner, t_fspill1, t_fspill2, t_fspill3, t_fspill4, t_fvent])
+
+t_zonehi = TempParam("t_zonehi", tcs[12])
+t_zonelow = TempParam("t_zonelow", tcs[13])
+t_outdoor = TempParam("t_outdoor", tcs[14])
+params.extend([t_zonehi, t_zonelow, t_outdoor])
+
+class AinParam(SampledParam):
+    """includes all AIN (sampled) parameters"""
+    def __init__(self, loc, sensor):
+        SampledParam.__init__(self, [loc+"", loc+"_min", loc+"_max"], ["V", "V", "V"], loc, sensor) 
+
+pos_door = AinParam("pos_door", door) ## TODO
+i_fan1 = AinParam("i_fan1", fan1)
+i_fan2 = AinParam("i_fan2", fan2)
+params.extend([pos_door, i_fan1, i_fan2]) ## Bool, Amps, Amps TODO
+
+ppm_co = AinParam("ppm_co", co) ## TODO
+params.extend([ppm_co])
+
+class CO2Param(SampledParam):
+    """includes all CO2 (sampled) parameters"""
+    def __init__(self, loc, sensor):
+        SampledParam.__init__(self, ["ppm_co2"+loc+"", "ppm_co2"+loc+"_min", "ppm_co2"+loc+"_max"], ["ppm", "ppm", "ppm"], loc, sensor) 
+
+    def reportScanData(self): ## override
+        return [self.val(), self.val(), self.val()]
+
+    def reportStatData(self): ## override
+        return [self.avgVal(), self.minVal(), self.maxVal()]
+
+whventco2 = CO2Param("whvent", co2) ## TODO: these should be different sensors
+fventco2 = CO2Param("fvent", co2)
+zoneco2 = CO2Param("zone", co2)
+params.extend([whventco2, fventco2, zoneco2])
+
+class PressureParam(SampledParam):
+    """includes all pressure (sampled) parameters"""
+    def __init__(self, loc, sensor):
+        SampledParam.__init__(self, ["p_"+loc+"", "p_"+loc+"_min", "p_"+loc+"_max"], ["kpa", "kpa", "kpa"], loc, sensor) 
+
+    def reportScanData(self): ## override
+        return [self.val(), self.val(), self.val()]
+
+    def reportStatData(self): ## override
+        return [self.avgVal(), self.minVal(), self.maxVal()]
+
+zeropress = PressureParam("zero", dlvr) ## TODO: these should be different sensors
+whventpress = PressureParam("whvent", dlvr)
+fventpress = PressureParam("fvent", dlvr)
+zonepress = PressureParam("zone", dlvr)
+params.extend([zeropress, whventpress, fventpress, zonepress])
+
+#params.extend([whburnerstatus, fburnerstatus]) ## SecondRec = [value, elapsed] MinuteRec = [ avg, cnt ]
+#params.extend([whmode, fmode]) 
+
+#params.extend([monstate, scans]) 
+
+HeaderRec = 0
+UnitsRec = 1
+SingleScanRec = 2
+MultiScanRec = 3
+
+def record(recType):
+    for param in params:
+        fields = None
+        if (recType == HeaderRec):
+            fields = param.reportHeaders()
+        elif (recType == UnitsRec):
+            fields = param.reportUnits()
+        elif (recType == SingleScanRec):
+            fields = param.reportScanData()
+        elif (recType == MultiScanRec):
+            fields = param.reportStatData()
+        for field in fields:
+            print("{}, ".format(field), end='')
+    print()
+
+record(HeaderRec)

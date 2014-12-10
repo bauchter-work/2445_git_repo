@@ -10,6 +10,7 @@
 ## 2014-11-24 BenA - added watchdog, config file query, uniqueID, gpio setup, pressure read
 ## 2014-11-30 DanC - added material related to record control and fetching data values
 ## 2014-11-30 TimC - accomodate new i2c exceptions; remove random; init burners as off
+## 2014-12-09 TimC - accomodate new lib method signatures
 ##
 
 import time, math, sys, os
@@ -211,7 +212,7 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
 
     ## print in initial order
     for sensor in Lib.ains:
-        print("sensor: {}  sps: {}  pga: {}  result: {}".format(sensor.name, adc.sps, adc.pga, sensor.getMostRecentValue()))
+        print("sensor: {}  sps: {}  pga: {}  result: {}".format(sensor.name, adc.sps, adc.pga, sensor.getLastVal()))
     pass
 
 # DC 11.28 also need to do:  
@@ -365,17 +366,17 @@ while True:
     for mux in range(Lib.Adc.NMUX):
         for sensor in Lib.sensors:
             if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
-                if (sensor.getMostRecentValue()-sensor.getPreviousValue())>4:
-                    print "Temp difference for {} is {}F".format(sensor.name,(sensor.getMostRecentValue()-\
-                      sensor.getPreviousValue()))
+                if (sensor.getLastVal()-sensor.getPrevVal())>4:
+                    print "Temp difference for {} is {}F".format(sensor.name,(sensor.getLastVal()-\
+                      sensor.getPrevVal()))
     
     #Read Pressure sensor check
     for sensor in Lib.sensors:
         if isinstance(sensor, Lib.Dlvr):
             sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
-        #    print "Pressure is: {}".format(sensor.getMostRecentValue()) 
+        #    print "Pressure is: {}".format(sensor.getLastVal()) 
         #if isinstance(sensor, Lib.Xbee):
-        #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getMostRecentValue())
+        #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getLastVal())
                 
     #for burner in Lib.burners:
     #    burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
@@ -383,11 +384,11 @@ while True:
     ## Process data
     ## Determine status of both burners
     ## Assign operating mode of wh and furnace
-    whmode = Lib.Burner.Mode5Off #wh.mode() ## TODO
-    fmode = Lib.Burner.Mode5Off #f.mode() ## TODO
+    whmode = Lib.Burner.Mode5Off #wh.calcMode() ## also updates status (if burner is present) ## TODO
+    fmode = Lib.Burner.Mode5Off #f.calcMode() ## also updates status (if burner is present) ## TODO
     if False:
         print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
-                .format(tick, f.tc.getMostRecentValue(), f.status(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
+                .format(tick, f.tc.getLastVal(), f.getStatus(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
 
     # DC we need to capture previous state before entering the state-setting routine
     #mon.setprevState(mon.getstate())   # DC 11.28 is this correct?
