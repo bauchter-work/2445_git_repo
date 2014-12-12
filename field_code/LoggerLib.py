@@ -10,12 +10,13 @@
 ## 2014-11-18 TimC - fix burner.status (was state); imported GPIO and upgraded Gpi and Gpo
 ## 2014-11-24 BenA - added pressure read detail to dlvr
 ## 2014-11-30 TimC - added use flag to Tc; improve the self-repair of sps and pga in Adc.startAdc(); I2c.errMsg now throws exception; assume both smbuses; switch to new print function; switch NaN to float 
-## 2014-12-09 TimC - added sensor stat methods; added param classes for record control; added burnertc subclass for moving averages; brought in config; improved burner status and mode calculations
+## 2014-12-10 TimC - added sensor stat methods; added param classes for record control; added burnertc subclass for moving averages; brought in config; improved burner status and mode calculations
+## 2014-12-12 TimC - prepare to enforce some more encapsulation; accommodate valve-switched sensors; 
 ##
 
 from __future__ import print_function
 
-import signal, time, gc
+import math, signal, time, gc
 from datetime import datetime
 from decimal import * ## https://docs.python.org/2/library/decimal.html
 from smbus import SMBus
@@ -431,6 +432,14 @@ class Ain(Sensor):
         self.sps = sps
         pass
 
+    def startAdc(self, channel, pga=PGA, sps=SPS): 
+        self.adc.startAdc(channel, pga=PGA, sps=SPS) 
+        self.pga = self.adc.pga ## in case it was changed
+        self.sps = self.adc.sps ## in case it was changed
+        
+    def fetchAdc(self):
+        return self.adc.fetchAdc()
+
     def appendAdcValue(self, value):
         self.appendValue(value)
         pass
@@ -449,30 +458,6 @@ class Tc(Ain):
         self.appendValue(value)
         pass
 
-tcs = [
-        Tc("TC1@U11", Adc.U11, Adc.MUX0),
-        Tc("TC2@U11", Adc.U11, Adc.MUX1),
-        Tc("TC3@U11", Adc.U11, Adc.MUX2),
-        Tc("TC4@U11", Adc.U11, Adc.MUX3),
-
-        Tc("TC5@U13", Adc.U13, Adc.MUX0),
-        Tc("TC6@U13", Adc.U13, Adc.MUX1),
-        Tc("TC7@U13", Adc.U13, Adc.MUX2),
-        Tc("TC8@U13", Adc.U13, Adc.MUX3),
-
-        Tc("TC9@U14",  Adc.U14, Adc.MUX0),
-        Tc("TC10@U14", Adc.U14, Adc.MUX1),
-        Tc("TC11@U14", Adc.U14, Adc.MUX2),
-        Tc("TC12@U14", Adc.U14, Adc.MUX3),
-
-        Tc("TC13@U15", Adc.U15, Adc.MUX0),
-        Tc("TC14@U15", Adc.U15, Adc.MUX1),
-        Tc("TC15@U15", Adc.U15, Adc.MUX2), ## TODO
-        Tc("TC16@U15", Adc.U15, Adc.MUX3), ## spare tc
-    ]
-
-ains.extend(tcs)
-
 class BurnerTc(Tc):
     """includes all (ADC-attached) AD8495-type thermocouple sensor inputs acquiring burner temperatures"""
     def __init__(self, name, adcIndex, mux, use=True, pga=PGA, sps=SPS):
@@ -490,6 +475,29 @@ class BurnerTc(Tc):
     def getMovAvg(self):
         return NaN if len(self.recent) <= 0 else math.fsum(self.recent)/len(self.recent)
 
+tcs = [
+  BurnerTc("TC1@U11", Adc.U11, Adc.MUX0),
+        Tc("TC2@U11", Adc.U11, Adc.MUX1),
+        Tc("TC3@U11", Adc.U11, Adc.MUX2),
+        Tc("TC4@U11", Adc.U11, Adc.MUX3),
+
+        Tc("TC5@U13", Adc.U13, Adc.MUX0),
+        Tc("TC6@U13", Adc.U13, Adc.MUX1),
+  BurnerTc("TC7@U13", Adc.U13, Adc.MUX2),
+        Tc("TC8@U13", Adc.U13, Adc.MUX3),
+
+        Tc("TC9@U14",  Adc.U14, Adc.MUX0),
+        Tc("TC10@U14", Adc.U14, Adc.MUX1),
+        Tc("TC11@U14", Adc.U14, Adc.MUX2),
+        Tc("TC12@U14", Adc.U14, Adc.MUX3),
+
+        Tc("TC13@U15", Adc.U15, Adc.MUX0),
+        Tc("TC14@U15", Adc.U15, Adc.MUX1),
+        Tc("TC15@U15", Adc.U15, Adc.MUX2), ## TODO
+        Tc("TC16@U15", Adc.U15, Adc.MUX3), ## spare tc
+    ]
+
+ains.extend(tcs)
 
 class CO(Ain):
     """includes all (ADC-attached) CO sensor inputs"""
@@ -497,18 +505,44 @@ class CO(Ain):
         Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
         pass
 
-class CO2(Ain):
-    """includes all (ADC-attached) CO2 sensor inputs"""
-    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS):
-        Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
-        pass
-
-door = Ain("JP1-A@U8", Adc.U8, Adc.MUX0) ## door pose
+door1 = Ain("JP1-A@U8", Adc.U8, Adc.MUX0) ## door1 pose
 fan1 = Ain("JP1-B@U8", Adc.U8, Adc.MUX1) ## fan current 1 sensor
 fan2 = Ain("JP1-C@U8", Adc.U8, Adc.MUX2) ## fan current 2 sensor
 co   = CO("JP1-D@U8", Adc.U8, Adc.MUX3) ## CO sensor
+ains.extend([door1, fan1, fan2, co]) ## remaining ains NOT included: [co2..., niu1, niu2, batt, niu3, niu4, niu5, niu6])
+sensors.extend(ains) 
 
-co2  = CO2("J25-1@U9", Adc.U9, Adc.MUX0) ## CO2 sensor
+## note: remaining sensors are more complicated...what with valves and all...and are handled separately
+
+class CO2(Ain):
+    """includes all (ADC-attached) CO2 sensor inputs"""
+    valve_whvent = 0 ## 5
+    valve_fvent = 1 ## 6
+    valve_zone = 2 ## 7
+
+    def __init__(self, name, adcIndex, mux, valve, pga=PGA, sps=SPS):
+        Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
+        self.valve = valve
+        pass
+
+    def setValves(self):
+        ## sets all valves as appropriate for sampling this co2 sensor's nominal location
+        ## --should be called as early as possible before the adc
+        for valve in range(len(co2_valves)): ##[CO2.valve_whvent, CO2.valve_fvent, CO2.valve_zone]: ## set the valves per the ctor arg
+            co2_valves[valve].setValue(valve == self.valve)
+        co2_valve_pos.setValue(self.valve) ## set the ad hoc param value for reporting valve position
+        co2_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
+
+    def appendAdcValue(self, value):
+        ## TODO convert as appropriate
+        self.appendValue(value)
+        pass
+
+co2_whvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switched--unique CO2 sensor on same ADC
+co2_fvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_fvent) ## valve-switched--unique CO2 sensor on same ADC
+co2_zone  = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_zone) ## valve-switched--unique CO2 sensor on same ADC
+co2_sensors = [co2_whvent, co2_fvent, co2_zone]
+
 niu1 = Ain("J25-2@U9", Adc.U9, Adc.MUX1) ## unused ain
 niu2 = Ain("J25-3@U9", Adc.U9, Adc.MUX2) ## unused ain
 batt = Ain("J25-4@U9", Adc.U9, Adc.MUX3) ## battery voltage sensor
@@ -518,16 +552,28 @@ niu4 = Ain("J25-6@U10", Adc.U10, Adc.MUX1) ## spare ain
 niu5 = Ain("J25-7@U10", Adc.U10, Adc.MUX2) ## spare ain
 niu6 = Ain("J25-8@U10", Adc.U10, Adc.MUX3) ## spare ain
 
-ains.extend([door, fan1, fan2, co, co2, niu1, niu2, batt, niu3, niu4, niu5, niu6])
-
-sensors.extend(ains)
 
 class Dlvr(I2c, Sensor):
     """includes the (I2C-attached) DLVR pressure sensor input"""
-    def __init__(self, name, i2cIndex):
+
+    valve_zero = 0 ## 1
+    valve_whvent = 1 ## 2
+    valve_fvent = 2 ## 3
+    valve_zone = 3 ## 4
+
+    def __init__(self, name, i2cIndex, valve):
         I2c.__init__(self, name, i2cIndex, addr=0x28)
         Sensor.__init__(self, name)
+        self.valve = valve
         pass
+
+    def setValves(self):
+        ## sets all valves as appropriate for sampling this pressure sensor's nominal location
+        ## --should be called as early as possible before the reading?
+        for valve in range(len(p_valves)): ##[Dlvr.valve_zero, Dlvr.valve_whvent, Dlvr.valve_fvent, Dlvr.valve_zone]: ## set the valves per the ctor arg
+            p_valves[valve].setValue(valve == self.valve)
+        p_valve_pos.setValue(self.valve) ## set the ad hoc param value for reporting valve position
+        p_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
 
     def readPressure(self):
         Response = self.readList(reg=0,length=4)
@@ -554,8 +600,11 @@ class Dlvr(I2c, Sensor):
             return Pressure_inH20
         pass
 
-dlvr = Dlvr("DLVR@U12", I2c.I2C1)
-sensors.extend([dlvr])
+p_zero = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zero)
+p_whvent = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_whvent)
+p_fvent = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_fvent)
+p_zone = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zone)
+p_sensors = [p_zero, p_whvent, p_fvent, p_zone]
 
 class Rtc(I2c):
     """includes the (I2C-attached) RTC clock input/ouput"""
@@ -634,17 +683,28 @@ class Gpo(Control):
         pass
 
 controls = [
-        Gpo("S01@P8-7", "P8_7"),
-        Gpo("S02@P8-8", "P8_8"),
-        Gpo("S03@P8-9", "P8_9"),
-        Gpo("S04@P8-10", "P8_10"),
-        Gpo("S05@P8-11", "P8_11"),
-        Gpo("S06@P8-12", "P8_12"),
-        Gpo("S07@P8-13", "P8_13"),
+        Gpo("S01@P8-7", "P8_7"), ## p_zero
+        Gpo("S02@P8-8", "P8_8"), ## p_whvent
+        Gpo("S03@P8-9", "P8_9"), ## p_fvent
+        Gpo("S04@P8-10", "P8_10"), ## p_zone
+        Gpo("S05@P8-11", "P8_11"), ## co2_whvent
+        Gpo("S06@P8-12", "P8_12"), ## co2_fvent
+        Gpo("S07@P8-13", "P8_13"), ## co2_zone
         Gpo("S08@P8-14", "P8_14"),
 
         Gpo("24V@P8-15", "P8_15"), ## switch for 24V pwr
     ]
+
+p_zero_valve = controls[0]
+p_whvent_valve = controls[1]
+p_fvent_valve = controls[2]
+p_zone_valve = controls[3]
+p_valves = [p_zero_valve, p_whvent_valve, p_fvent_valve, p_zone_valve]
+
+co2_whvent_valve = controls[4]
+co2_fvent_valve = controls[5]
+co2_zone_valve = controls[6]
+co2_valves = [co2_whvent_valve, co2_fvent_valve, co2_zone_valve]
 
 ############################################
 ## burners
@@ -742,8 +802,8 @@ class Burner(object):
                             if (((elapsed >= 120) and ((elapsed % 60) == 0)) or (elapsed >= 180)):
                                 self.mode = Burner.Mode5Off
                             ## else no change in mode
-            self.prevMode = mode
-        return mode
+            self.prevMode = self.mode
+        return self.mode
         pass
 
     def getMode(self):
@@ -752,9 +812,9 @@ class Burner(object):
 waterHeaterIsPresent = (Conf.waterHeaterIsPresent is not None and Conf.waterHeaterIsPresent == True)
 furnaceIsPresent = (Conf.furnaceIsPresent is not None and Conf.furnaceIsPresent == True)
 
-furnace = Burner("furnace", 5, -5, 0, furnaceIsPresent)
-waterHtr = Burner("waterHtr", 5, -5, 1, waterHeaterIsPresent)
-burners = [ furnace, waterHtr ]
+waterHtr = Burner("waterHtr", 5, -5, 0, waterHeaterIsPresent)
+furnace = Burner("furnace", 5, -5, 6, furnaceIsPresent)
+burners = [waterHtr, furnace]
 
 ############################################
 ## misc / ancillary
@@ -832,6 +892,12 @@ class Param(object):
     def reportStatData(self): ## len must match headers and units
         return self.values
 
+    def setValue(self, value): ## storage for ad hoc params
+        if (len(self.values) <= 0): 
+            self.values.append(value)
+        else: 
+            self.values[0] = value
+
 siteid = Param(["site"], [""], ["MSP___"])
 timest = Param(["time"], [""], [TIME(now())])
 recnum = Param(["rec_num"])
@@ -907,10 +973,10 @@ class AinParam(SampledParam):
     def __init__(self, loc, sensor):
         SampledParam.__init__(self, [loc+"", loc+"_min", loc+"_max"], ["V", "V", "V"], loc, sensor) 
 
-pos_door = AinParam("pos_door", door) ## TODO
+pos_door1 = AinParam("pos_door1", door1) ## TODO
 i_fan1 = AinParam("i_fan1", fan1)
 i_fan2 = AinParam("i_fan2", fan2)
-params.extend([pos_door, i_fan1, i_fan2]) ## Bool, Amps, Amps TODO
+params.extend([pos_door1, i_fan1, i_fan2]) ## Bool, Amps, Amps TODO
 
 ppm_co = AinParam("ppm_co", co) ## TODO
 params.extend([ppm_co])
@@ -918,7 +984,8 @@ params.extend([ppm_co])
 class CO2Param(SampledParam):
     """includes all CO2 (sampled) parameters"""
     def __init__(self, loc, sensor):
-        SampledParam.__init__(self, ["ppm_co2"+loc+"", "ppm_co2"+loc+"_min", "ppm_co2"+loc+"_max"], ["ppm", "ppm", "ppm"], loc, sensor) 
+        fix = "ppm_co2_"+loc
+        SampledParam.__init__(self, [fix+"", fix+"_min", fix+"_max"], ["ppm", "ppm", "ppm"], loc, sensor) 
 
     def reportScanData(self): ## override
         return [self.val(), self.val(), self.val()]
@@ -926,15 +993,18 @@ class CO2Param(SampledParam):
     def reportStatData(self): ## override
         return [self.avgVal(), self.minVal(), self.maxVal()]
 
-whventco2 = CO2Param("whvent", co2) ## TODO: these should be different sensors
-fventco2 = CO2Param("fvent", co2)
-zoneco2 = CO2Param("zone", co2)
-params.extend([whventco2, fventco2, zoneco2])
+co2_valve_pos = Param(["loc_co2"]) ## ad hoc param for reporting co2 valve position
+co2_valve_time = Param(["sec_co2"]) ## ad hoc param for reporting co2 valve open time--TODO: should report duration
+whventco2 = CO2Param("whvent", co2_whvent)
+fventco2 = CO2Param("fvent", co2_fvent)
+zoneco2 = CO2Param("zone", co2_zone)
+params.extend([co2_valve_pos, co2_valve_time, whventco2, fventco2, zoneco2])
 
 class PressureParam(SampledParam):
     """includes all pressure (sampled) parameters"""
     def __init__(self, loc, sensor):
-        SampledParam.__init__(self, ["p_"+loc+"", "p_"+loc+"_min", "p_"+loc+"_max"], ["kpa", "kpa", "kpa"], loc, sensor) 
+        fix = "p_"+loc
+        SampledParam.__init__(self, [fix+"", fix+"_min", fix+"_max", fix+"_rng", fix+"_rng_min", fix+"_rng_max"], ["kpa", "kpa", "kpa", "kpa", "kpa"], loc, sensor) 
 
     def reportScanData(self): ## override
         return [self.val(), self.val(), self.val()]
@@ -942,16 +1012,20 @@ class PressureParam(SampledParam):
     def reportStatData(self): ## override
         return [self.avgVal(), self.minVal(), self.maxVal()]
 
-zeropress = PressureParam("zero", dlvr) ## TODO: these should be different sensors
-whventpress = PressureParam("whvent", dlvr)
-fventpress = PressureParam("fvent", dlvr)
-zonepress = PressureParam("zone", dlvr)
-params.extend([zeropress, whventpress, fventpress, zonepress])
+p_valve_pos = Param(["loc_p"]) ## ad hoc param for reporting pressure valve position
+p_valve_time = Param(["sec_p"]) ## ad hoc param for reporting pressure valve open time--TODO: should report duration
+zeropress = PressureParam("zero", p_zero) ## TODO: these should be different sensors
+whventpress = PressureParam("whvent", p_whvent)
+fventpress = PressureParam("fvent", p_fvent)
+zonepress = PressureParam("zone", p_zone)
+params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
 
-#params.extend([whburnerstatus, fburnerstatus]) ## SecondRec = [value, elapsed] MinuteRec = [ avg, cnt ]
-#params.extend([whmode, fmode]) 
+whburner = Param(["wh_status", "wh_mode"])
+fburner = Param(["f_status", "f_mode"])
+monitor = Param(["sys_state"])
+params.extend([whburner, fburner, monitor])
 
-#params.extend([monstate, scans]) 
+#####################################################
 
 HeaderRec = 0
 UnitsRec = 1
@@ -970,7 +1044,7 @@ def record(recType):
         elif (recType == MultiScanRec):
             fields = param.reportStatData()
         for field in fields:
-            print("{}, ".format(field), end='')
+            print("{}, ".format(field), end='\n')
     print()
 
-record(HeaderRec)
+#record(HeaderRec)

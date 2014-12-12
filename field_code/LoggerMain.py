@@ -11,6 +11,7 @@
 ## 2014-11-30 DanC - added material related to record control and fetching data values
 ## 2014-11-30 TimC - accomodate new i2c exceptions; remove random; init burners as off
 ## 2014-12-09 TimC - accomodate new lib method signatures
+## 2014-12-12 TimC - move setting of furnace and waterhtr tcs to library; accommodate some revisions in lib; call the improved burner mode calc methods; implement Dan's state determination logic
 ##
 
 import time, math, sys, os
@@ -64,17 +65,6 @@ for control in Lib.controls:
 UART.setup("UART4")
 ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1)
 
-## set furnace and waterhtr TCs
-if True:
-    for sensor in Lib.tcs:
-        if sensor.name == "TC1@U11":
-            Lib.furnace.tc = sensor
-            break
-
-    for sensor in Lib.tcs:
-        if sensor.name == "TC2@U11":
-            Lib.waterHtr.tc = sensor
-            break
 
 ADS1115=0x01 #Defined for Adafruit ADC Library
 
@@ -226,7 +216,7 @@ def fetchPressure():
     count = 0
     for i in range(25):
         previous = time.time()
-        pressure_inH20 = Lib.dlvr.readPressure()
+        pressure_inH20 = Lib.p_zero.readPressure()
         if math.isnan(pressure_inH20):
             count -=1
         else:
@@ -371,8 +361,9 @@ while True:
                       sensor.getPrevVal()))
     
     #Read Pressure sensor check
-    for sensor in Lib.sensors:
+    for sensor in Lib.p_sensors:
         if isinstance(sensor, Lib.Dlvr):
+            sensor.setValves()
             sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
         #    print "Pressure is: {}".format(sensor.getLastVal()) 
         #if isinstance(sensor, Lib.Xbee):
@@ -384,8 +375,8 @@ while True:
     ## Process data
     ## Determine status of both burners
     ## Assign operating mode of wh and furnace
-    whmode = Lib.Burner.Mode5Off #wh.calcMode() ## also updates status (if burner is present) ## TODO
-    fmode = Lib.Burner.Mode5Off #f.calcMode() ## also updates status (if burner is present) ## TODO
+    whmode = wh.calcMode() ## also updates status (if burner is present) ## TODO
+    fmode = f.calcMode() ## also updates status (if burner is present) ## TODO
     if False:
         print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
                 .format(tick, f.tc.getLastVal(), f.getStatus(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
@@ -394,35 +385,34 @@ while True:
     #mon.setprevState(mon.getstate())   # DC 11.28 is this correct?
 
     ## Assign monitoring system state [these need to be re-checked thoroughly--TimC]
-    if ((whmode == Lib.Burner.Mode2On) or (fmode == Lib.Burner.Mode2On)): 
-        ## at least one burner already on
+    if ((whmode == Lib.Burner.Mode2On) or (fmode == Lib.Burner.Mode2On)): ## at least one burner is on
         mon.state = Mon.State2On
-    elif ((whmode == Lib.Burner.Mode1JustStarted) or (fmode == Lib.Burner.Mode1JustStarted)): 
-        ## first burner just started [this is _either_ burner just started, right?--TimC]
+    elif ((whmode == Lib.Burner.Mode1JustStarted) or (fmode == Lib.Burner.Mode1JustStarted)): ## first burner just started
         mon.state = Mon.State1Start
-    elif ((whmode == Lib.Burner.Mode3JustStopped) or (fmode == Lib.Burner.Mode3JustStopped)): 
-        ## last burner just stopped
+    elif ((whmode == Lib.Burner.Mode3JustStopped) or (fmode == Lib.Burner.Mode3JustStopped)): ## last burner just stopped
         mon.state = Mon.State3Stop
-    elif ((mon.state == Mon.State4CoolDown) or (whmode == Lib.Burner.Mode4Cooling) or (fmode == Lib.Burner.Mode4Cooling)): 
-        ## hold in state 4 even if burners have moved to state 5
-        lastStopTime = f.stopTime if (wh.stopTime < f.stopTime) else wh.stopTime
-        if ((((tick - lastStopTime) >= 120.0) and (datetime.utcfromtimestamp(tick).second == 0)) or (lastStopTime >= 180.0)): 
+    elif ((whmode == Lib.Burner.Mode4Cooling) or (fmode == Lib.Burner.Mode4Cooling)): ## hold in state 4 even if burners have moved to state 5
+        if True: ## DBG
             ## only switch state at top of minute  ## check for overrun
-            mon.state = Mon.State6Off
-        else: ## change from state 3 to 4 (or stay in state 4)
-            mon.state = Mon.State4CoolDown
-    elif (mon.state == Mon.State6Off):
+            lastStopTime = f.stopTime if (wh.stopTime < f.stopTime) else wh.stopTime
+            if ((((tick - lastStopTime) >= 120.0) and (datetime.utcfromtimestamp(tick).second == 0)) or ((tick - lastStopTime) >= 180.0)): 
+                print "mon.state should be Mon.State6Off"
+        mon.state = Mon.State4CoolDown
+    elif ((whmode == Lib.Burner.Mode5Off) or (fmode == Lib.Burner.Mode5Off)): 
+        mon.state = Mon.State6Off
+    ## else no change
+
+    ## Cycle between states 5 and 6 when both burners are off
+    if (mon.state == Mon.State6Off):
         if ((math.trunc(tick) % 900) < 60): ## in first minute of 15 minute interval
-            ## TODO set flag to start CO2 measurement
+            ## TODO set flag to start CO2 measurement?
             mon.state = Mon.State5OffCO2
         ## else no change
     elif (mon.state == Mon.State5OffCO2):
         if ((math.trunc(tick) % 900) >= 60): ## beyond first minute of 15 minute interval 
             mon.state = Mon.State6Off
         ## else no change
-    else:
-        #print("no state change")
-        pass
+    ## else no change
 
     #for sensor in Lib.sensors:
 	#	print sensor.name
