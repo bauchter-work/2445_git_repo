@@ -10,6 +10,7 @@
 ## 2014-11-24 BenA - added watchdog, config file query, uniqueID, gpio setup, pressure read
 ## 2014-11-30 DanC - added material related to record control and fetching data values
 ## 2014-11-30 TimC - accomodate new i2c exceptions; remove random; init burners as off
+## 2014-12-08 BenA - added xbee data input - assuming up to three xbee nodes
 ## 2014-12-09 TimC - accomodate new lib method signatures
 ## 2014-12-12 TimC - move setting of furnace and waterhtr tcs to library; accommodate some revisions in lib; call the improved burner mode calc methods; implement Dan's state determination logic
 ##
@@ -26,14 +27,14 @@ import serial
 ###########################################################################################
 ## setup / initialize
 
-# Activate watchdog
+## Activate watchdog
 try:
     watchdog = open("/dev/watchdog",'w+')
     watchdog.write("\n")
 except:
     print("Unable to access watchdog")
 
-#Get UniqueID for BBB
+## Get UniqueID for BBB
 try:
     os.system("/root/field-code/getUniqueID.sh") #run this to extract Serial Number for EEPROM
     uniqueFile = open("uniqueID",'r')
@@ -42,7 +43,7 @@ try:
 except:
     print("Error retrieving UniqueID from BBB EEPROM")
 
-# Load Configuration File
+## Load Configuration File
 try: 
     import LoggerConfig as Conf
 
@@ -50,23 +51,23 @@ except:
     print "No LoggerConfig.py file available or error parsing"
     sys.exit()
 
-#setup all General Purpose Inputs and Outputs
+## setup all General Purpose Inputs and Outputs
 for control in Lib.controls:
     control.setValue(0) #write GPIO.LOW
 #print("GPI {}: reads {}".format(Lib.sw1.name,Lib.sw1.getValue() ))
 #print("GPI {}: reads {}".format(Lib.sw2.name,Lib.sw1.getValue() ))
 
-#Turn on 24V power
+## Turn on 24V power
 for control in Lib.controls:
     if control.name == "24V@P8-15":
         control.setValue(1) #write GPIO.HIGH
 
-#Setup zigbee UART for asynchronous operation
+## Setup zigbee UART for asynchronous operation
 UART.setup("UART4")
-ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1)
+ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1) #this is a letter "Oh"-4
 
 
-ADS1115=0x01 #Defined for Adafruit ADC Library
+ADS1115=0x01 # Defined for Adafruit ADC Library 
 
 
 ###########################################################################################
@@ -123,8 +124,9 @@ def fetchXbee(data):
                         for x in samplesDict:
                             for y in x: 
                                 if matchAddress and str(y) == str(sensor.adc):
-                                    #print '\t'+str(y),x[y],sensor.adc
-                                    sensor.appendValue(x[y])
+                                    #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc
+                                    volts = x[y]*0.001173 # per xbee adc conversion to volts
+                                    sensor.appendValue(volts)
     except:
         print ("unable to print or parse xbee data")
     pass
@@ -211,7 +213,7 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
 #  might be a separate function.
 
 def fetchPressure():
-    #Read Pressure sensor check
+    ## Read Pressure sensor check
     pressureAvg = 0.0
     count = 0
     for i in range(25):
@@ -224,11 +226,13 @@ def fetchPressure():
           #print "time delay is: {}".format(time.time()-previous)
           pressureAvg = pressureAvg + pressure_inH20
         count += 1
-        time.sleep(0.0066-(time.time()-previous)) #pressure is updated every 9.5mSec for low power
-                                  #The delay between adc updates is 6 m sec 
-                                  #for 31 cycles then it does an internal 
-                                  #check that takes 9.5. We should go just over 6 for our delay 
-                                  #and may get a duplicate reading occasionally. 
+        time.sleep(0.0066-(time.time()-previous)) 
+                                  ## pressure is updated every 9.5mSec for low power
+                                  ## The delay between adc updates is 6 m sec 
+                                  ## for 31 cycles then it does an internal 
+                                  ## check that takes 9.5. We should go just over 6 for our delay 
+                                  ## and may get a duplicate reading occasionally. 
+                                  ##
 
     if count != 0.0:
         pressureAvg = pressureAvg/count
@@ -266,7 +270,7 @@ def closeOutRecord():      # DC 11.28
         sensor.value.clear()                 
     
 def write1secRecord():      # DC 11.28 
-    # When writing 1-second records, we simply write sensor.currentvalue 
+    # wHen writing 1-second records, we simply write sensor.currentvalue 
     #  to the data record 
     # Number of samples = 1
     # Increment record number integer
@@ -312,10 +316,11 @@ class Mon(object):
 #############
 ## start main
 #############
-#setup Xbee (must be after def of print_xbee)
+## setup Xbee (must be after def of fetchXbee)
 xbee = zigbee.ZigBee(ser,callback=fetchXbee)  # for uart4 xbee coordinator
-for x in range(len(Conf.xBeeNodes)):  # for each xbee end node in the network
-    nodeAddress = Conf.xBeeNodes[x]
+xBeeNodes = [ Conf.xBeeNode1, Conf.xBeeNode2, Conf.xBeeNode3 ] # create a list from value set
+for x in range(len(xBeeNodes)):  # for each xbee end node in the network
+    nodeAddress = xBeeNodes[x]
     xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=0,address=nodeAddress,use=True)   #adc-1
     Lib.sensors.extend([xbeeTemp])
     xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=1,address=nodeAddress,use=True)   #adc-2
