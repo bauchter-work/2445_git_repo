@@ -13,7 +13,10 @@
 ## 2014-12-08 BenA - added xbee data input - assuming up to three xbee nodes
 ## 2014-12-09 TimC - accomodate new lib method signatures
 ## 2014-12-12 TimC - move setting of furnace and waterhtr tcs to library; accommodate some revisions in lib; call the improved burner mode calc methods; implement Dan's state determination logic
-##
+## 2014.12.14 DanC - drop Adafruit adc call, try fixing adc call using Tim's library
+##                 - 
+## 
+ 
 
 import time, math, sys, os
 from decimal import *
@@ -168,18 +171,23 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                     adc = sensor.adc
                     if (job == 0): ## start
                         try:
-                            adc.startAdc(mux, sps=8)
+                            adc.startAdc(mux, pga=4096, sps=250)  ## DWC 12.14 revert back to default sps=250, pga=4096
+                            print("job={} mux={} sensor={}"\
+                                .format(job,mux,sensor.name))
                         except Exception as err:
                             print("error starting ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
                                     .format(sensor.name, adc.addr, mux, err))
                             adc.startTime = time.time() ## really needed?
                     elif (job == 1): ## sleep
                         elapsed = time.time() - adc.startTime 
-                        adctime = (1.0 / adc.sps) + .072 
+                        adctime = (1.0 / adc.sps) + .001 
                         if (elapsed < adctime):
                             #print("fetching 0x{:02x} too early: at {} sps delay should be {} but is {}"\
                             #        .format(adc.addr, sensor.sps, adctime, elapsed))
                             time.sleep(adctime - elapsed + .002)
+                        ## DWC 12.14 add print statement, take out of if statement
+                        print("job={} mux={} sensor={} adctime={} elapsed={}"\
+                            .format(job,mux,sensor.name,adctime,elapsed))
                     else: #if (job == 2): ## fetch
                         try:
                             Value = adc.fetchAdc()
@@ -190,23 +198,25 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                                     result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
                                 else:
                                     result = (360*Volts)+32 #for deg. F
-                                #print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
-                                #    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+                                print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\
+                                    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
                             else:
                                 #print("this is not a TC."),  #DBG
                                 result = Value #TODO conversions?
-                                #print("{} \tResult: {}mV"\
-                                #    .format(sensor.name,result))
+                                print("{} \tResult: {}mV"\
+                                    .format(sensor.name,result))
                             sensor.appendAdcValue(result)
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
                                     .format(sensor.name, adc.addr, mux, err))
 
     ## print in initial order
+    ## DWC 12.14 comment out while using job-specific print statements above
+    """
     for sensor in Lib.ains:
         print("sensor: {}  sps: {}  pga: {}  result: {}".format(sensor.name, adc.sps, adc.pga, sensor.getLastVal()))
     pass
-
+    """
 # DC 11.28 also need to do:  
 # When done with DLVR reads, calculate average and range within the values
 # Pressure sensor reads might be interleaved with i2c adc reads above, or
@@ -236,8 +246,9 @@ def fetchPressure():
 
     if count != 0.0:
         pressureAvg = pressureAvg/count
-    #print "count is: {}".format(count),
-    #print "pressureAvg is: {}".format(pressureAvg)
+    ## DWC 12.14 uncommented print statements    
+    print "count is: {}".format(count),
+    print "pressureAvg is: {}".format(pressureAvg)
     return pressureAvg
     pass
 
@@ -341,8 +352,10 @@ f = Lib.furnace
 mon = Mon()
 
 ## determine the current state
-fetchAdcInputs()
-fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15]) #grab all ADC inputs from TC ADCs 
+## DWC 12.14 I don't think we want to fetch here, rather just start scans, and 
+##  status/mode/state should sort themselves out in time.  Commented out.
+#fetchAdcInputs()
+#fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15]) #grab all ADC inputs from TC ADCs 
 
 ## main loop
 Lib.Timer.start()
@@ -355,22 +368,31 @@ while True:
 
     ## Scan all inputs
     fetchAdcInputs() 
-    fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
+    ## DWC drop fetchTempsAdafruit()
+    #fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
+    ## DWC 12.14 trial of fetch pressure() in line
+    currentpressure = fetchPressure()
+    print "Pressure now: {}".format(currentpressure)
     
-    #This following for loop for DBG    
+    #This following for loop for DBG  
     for mux in range(Lib.Adc.NMUX):
         for sensor in Lib.sensors:
+         ## DWC 12.14 code hangs up here (Tc object has no attribute 'getLastVal')
+        ##  so commented out
+            """
             if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
                 if (sensor.getLastVal()-sensor.getPrevVal())>4:
                     print "Temp difference for {} is {}F".format(sensor.name,(sensor.getLastVal()-\
                       sensor.getPrevVal()))
-    
+            """
     #Read Pressure sensor check
-    for sensor in Lib.p_sensors:
-        if isinstance(sensor, Lib.Dlvr):
-            sensor.setValves()
-            sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
-        #    print "Pressure is: {}".format(sensor.getLastVal()) 
+    ## DWC 12.14 comment out, put in line above
+            """
+            if isinstance(sensor, Lib.Dlvr):
+                sensor.setValves()
+                sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
+            #   print "Pressure is: {}".format(sensor.getLastVal()) 
+            """
         #if isinstance(sensor, Lib.Xbee):
         #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getLastVal())
                 
@@ -382,9 +404,15 @@ while True:
     ## Assign operating mode of wh and furnace
     whmode = wh.calcMode() ## also updates status (if burner is present) ## TODO
     fmode = f.calcMode() ## also updates status (if burner is present) ## TODO
-    if False:
-        print("time {:>12.1f} furnace temp: {:>5.1f}  status: {}  mode: {}  mon state: {}  prevState: {}  sw1: {}"\
-                .format(tick, f.tc.getLastVal(), f.getStatus(), fmode, mon.state, mon.prevState, Lib.sw1.getValue()))
+    if True:      ## DWC 12.14 activated to test (was if False:)
+        print("furnace temp: {:>5.1f}  fstatus: {}  fmode: {} fprevMode: {} "\
+                .format(f.tc.getLastVal(), f.getStatus(), fmode, f.prevMode))
+        ## DWC 121.14 added similar print for wh:
+        print("wh temp: {:>5.1f}  whstatus: {}  whmode: {} whprevMode: {} "\
+                .format(wh.tc.getLastVal(), wh.getStatus(), whmode, wh.prevMode))
+        print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
+                .format(tick, mon.state, mon.prevState, Lib.sw1.getValue()))
+
 
     # DC we need to capture previous state before entering the state-setting routine
     #mon.setprevState(mon.getstate())   # DC 11.28 is this correct?

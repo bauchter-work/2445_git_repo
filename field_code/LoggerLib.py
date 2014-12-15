@@ -12,7 +12,10 @@
 ## 2014-11-30 TimC - added use flag to Tc; improve the self-repair of sps and pga in Adc.startAdc(); I2c.errMsg now throws exception; assume both smbuses; switch to new print function; switch NaN to float 
 ## 2014-12-10 TimC - added sensor stat methods; added param classes for record control; added burnertc subclass for moving averages; brought in config; improved burner status and mode calculations
 ## 2014-12-12 TimC - prepare to enforce some more encapsulation; accommodate valve-switched sensors; 
-##
+## 2014.12.14 DanC - change default pga for ADCs from 1024 to 4096 full scale
+##                 - added .extend for pressure sensors (also needed for co2?)
+##                 - made significant revisions to calcMode()
+## 
 
 from __future__ import print_function
 
@@ -135,7 +138,7 @@ class I2c(object):
         except IOError, err:
             return self.errMsg(err)
 
-PGA = 1024
+PGA = 4096    ## DWC 12.14 changed default from 1024 to 4096 
 SPS = 250
 
 class Adc(I2c):
@@ -552,6 +555,7 @@ niu4 = Ain("J25-6@U10", Adc.U10, Adc.MUX1) ## spare ain
 niu5 = Ain("J25-7@U10", Adc.U10, Adc.MUX2) ## spare ain
 niu6 = Ain("J25-8@U10", Adc.U10, Adc.MUX3) ## spare ain
 
+## DWC 12.14 need ain.extend and sensors.extend for these: [co2..., niu1, niu2, batt, niu3, niu4, niu5, niu6]
 
 class Dlvr(I2c, Sensor):
     """includes the (I2C-attached) DLVR pressure sensor input"""
@@ -605,6 +609,11 @@ p_whvent = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_whvent)
 p_fvent = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_fvent)
 p_zone = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zone)
 p_sensors = [p_zero, p_whvent, p_fvent, p_zone]
+
+## DWC 12.14 add sensors.extend here
+##  Note does NOT use ains.extend like: ains.extend([door1, fan1, fan2, co]) 
+sensors.extend(p_sensors) 
+
 
 class Rtc(I2c):
     """includes the (I2C-attached) RTC clock input/ouput"""
@@ -734,9 +743,9 @@ class Burner(object):
         self.startTime = None
         self.stopTime = None
         self.status = Burner.STATUS_OFF
-        self.prevStatus = None
-        self.mode = None
-        self.prevMode = None
+        self.prevStatus = Burner.STATUS_OFF   ## DWC 12.14 was  self.prevStatus = None, OK if set at top of calcStatus()
+        self.mode = self.Mode5Off         ## DWC 12.14 was  self.mode = None
+        self.prevMode = None     ## DWC 12.14 was  self.prevMode = None, OK if set at top of calcMode()
         pass
 
     def calcStatus(self):
@@ -754,7 +763,9 @@ class Burner(object):
     def getStatus(self):
         return self.status
 
-    def iscooling(self):
+    """    
+    ## DWC 12.14 not used - incorporated below
+    def iscooling(self):      
         cooling = False
         if (self.stopTime is not None):
             coolTime = self.stopTime + 180.0 ## plus 3 minutes...
@@ -763,48 +774,61 @@ class Burner(object):
             cooling = True if (time.time() < coolTime) else False
         return cooling
         pass
-
+    """
+    ## DWC 12.14 Major revision
     def calcMode(self):
         """N.B. this method also sets the stopTime which is used in the calculation--must be called once and only once every tick"""
-        self.mode = Burner.Mode0NotPresent
+        ## self.mode = Burner.Mode0NotPresent  Why would this be here - covered in initialization
         if (self.isPresent):
+            self.prevMode = self.mode     ## Moved up from end
             self.calcStatus() ## update status
-            self.mode = Burner.Mode2On if (self.status == Burner.STATUS_ON) else Burner.Mode5Off
-            if (self.prevMode is not None):
-                if (self.prevStatus != Burner.STATUS_ON):
-                    if (self.status == Burner.STATUS_ON):
-                        self.mode = Burner.Mode1JustStarted
-                        self.startTime = now()
-                    elif (self.prevMode == Burner.Mode1JustStarted):
-                        if (self.status == Burner.STATUS_ON):
-                            self.mode = Burner.Mode2On
-                            self.timeOn = now() - self.startTime
-                        else:
-                            self.mode = Burner.Mode4Cooling
-                            ## unexpected--register an error
-                    elif (self.prevMode == Burner.Mode2On):
-                        if (self.status == Burner.STATUS_OFF):
-                            self.mode = Burner.Mode3JustStopped
-                            self.timeOn = 0.0
-                            self.stopTime = now()
-                        else:
-                            self.timeOn = now() - self.startTime
-                            ## no change in mode
-                    elif (self.prevMode == Burner.Mode3JustStopped):
-                        if (self.status == Burner.STATUS_OFF):
-                            self.mode = Burner.Mode4Cooling
-                        else:
-                            self.mode = Burner.Mode1JustStarted
-                            ## unexpected--register an error
-                    elif (self.prevMode == Burner.Mode4Cooling):
-                        if (self.status == Burner.STATUS_OFF):
-                            elapsed = math.trunc(now() - self.stopTime)
-                            if (((elapsed >= 120) and ((elapsed % 60) == 0)) or (elapsed >= 180)):
-                                self.mode = Burner.Mode5Off
-                            ## else no change in mode
-            self.prevMode = self.mode
+            self.timeOn = 0.0  ## set in mode calcs as needed
+            ## DWC 12.14 drop: self.mode = Burner.Mode2On if (self.status == Burner.STATUS_ON) else Burner.Mode5Off
+            ## DWC 12.14 don't think we need this if values are intialized:
+            #if (self.prevMode is not None):
+            if (self.prevMode == Burner.Mode1JustStarted):
+                if (self.status == Burner.STATUS_ON):
+                    self.mode = Burner.Mode2On
+                    self.timeOn = now() - self.startTime
+                else:
+                    self.mode = Burner.Mode4Cooling
+                    ## unexpected--register an error
+                    self.stopTime = now()
+            elif (self.prevMode == Burner.Mode2On):
+                if (self.status == Burner.STATUS_OFF):
+                    self.mode = Burner.Mode3JustStopped
+                    self.timeOn = now() - self.startTime
+                    self.stopTime = now()
+                else:
+                    self.timeOn = now() - self.startTime
+                    ## no change in mode
+            elif (self.prevMode == Burner.Mode3JustStopped):
+                if (self.status == Burner.STATUS_OFF):
+                    self.mode = Burner.Mode4Cooling
+                    self.timeCooling = now() - self.stopTime
+                else:
+                    self.mode = Burner.Mode1JustStarted
+                    ## unexpected--register an error
+                    self.startTime = now()
+            elif (self.prevMode == Burner.Mode4Cooling):
+                if (self.status == Burner.STATUS_OFF):
+                    self.timeCooling = now() - self.stopTime
+                    ## elapsed = math.trunc(now() - self.stopTime)  Need math.trunc??
+                    if (((self.timeCooling >= 120) and ((self.timeCooling % 60) == 0))\
+                    or (self.timeCooling >= 180)\
+                    or (self.timeCooling <= -10)):  ## Check for large negative error
+                        self.mode = Burner.Mode5Off
+                    ## Else stay in Mode4Cooling
+                else:
+                    self.mode = Burner.Mode1JustStarted
+                    self.startTime = now()
+            elif (self.prevMode == Burner.Mode5Off):
+                if (self.status == Burner.STATUS_ON):
+                    self.mode = Burner.Mode1JustStarted
+                    self.startTime = now()
+                ## Else stay in Mode5Off
         return self.mode
-        pass
+
 
     def getMode(self):
         return self.mode
@@ -812,8 +836,9 @@ class Burner(object):
 waterHeaterIsPresent = (Conf.waterHeaterIsPresent is not None and Conf.waterHeaterIsPresent == True)
 furnaceIsPresent = (Conf.furnaceIsPresent is not None and Conf.furnaceIsPresent == True)
 
-waterHtr = Burner("waterHtr", 5, -5, 0, waterHeaterIsPresent)
-furnace = Burner("furnace", 5, -5, 6, furnaceIsPresent)
+## Set dTemps for identifying burner turn on and turn off in constructors
+waterHtr = Burner("waterHtr", 5, -2, 0, waterHeaterIsPresent)
+furnace = Burner("furnace", 5, -2, 6, furnaceIsPresent)
 burners = [waterHtr, furnace]
 
 ############################################
