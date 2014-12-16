@@ -1,6 +1,6 @@
 #! /usr/bin/python
 
-## LoggerMain -- Combustion Minitoring logic
+## LoggerMain -- Combustion Monitoring logic
 ##
 ## 2014-11-05 TimC - Initial
 ## 2014-11-16 TimC - moved setups to library; 
@@ -14,7 +14,6 @@
 ## 2014-12-09 TimC - accomodate new lib method signatures
 ## 2014-12-12 TimC - move setting of furnace and waterhtr tcs to library; accommodate some revisions in lib; call the improved burner mode calc methods; implement Dan's state determination logic
 ## 2014.12.14 DanC - drop Adafruit adc call, try fixing adc call using Tim's library
-##                 - 
 ## 
  
 
