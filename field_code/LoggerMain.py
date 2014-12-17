@@ -1,6 +1,6 @@
 #! /usr/bin/python
 
-## LoggerMain -- Combustion Minitoring logic
+## LoggerMain -- Combustion Monitoring logic
 ##
 ## 2014-11-05 TimC - Initial
 ## 2014-11-16 TimC - moved setups to library; 
