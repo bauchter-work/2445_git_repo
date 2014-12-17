@@ -16,7 +16,7 @@
 ##                 - added .extend for pressure sensors (also needed for co2?)
 ##                 - made significant revisions to calcMode()
 ## 2014-12-16 BenA - satisfied the records output header list. now to flesh out value capturing
-## 
+## 2014-12-17 BenA - added unit conversions to the Sensor types 
 
 from __future__ import print_function
 
@@ -458,8 +458,15 @@ class Tc(Ain):
         pass
 
     def appendAdcValue(self, value): ## override
-        value = value ## TODO convert to temp
-        self.appendValue(value)
+        value = value ## convert to temp
+        Volts = value/1000
+        if (self.name == "TC15@U15") or (self.name=="TC16@U15"):
+            result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
+        else:
+            result = (360*Volts)+32 #for deg. F
+            #print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\  ## See new print below
+            #    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+        self.appendValue(result)
         pass
 
 class BurnerTc(Tc):
@@ -505,8 +512,16 @@ ains.extend(tcs)
 
 class CO(Ain):
     """includes all (ADC-attached) CO sensor inputs"""
-    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS):
+    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS, co_calib_value=1658):
         Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
+        self.co_calib_value = co_calib_value
+        pass
+    
+    def appendAdcValue(self, value):
+        value = value
+        volts = value/1000  ## TODO get this converted to engineering units, and test 
+        result = ((volts * 0.5) * 2.326e6) / self.co_calib_value
+        self.appendValue(result)
         pass
 
 door1 = Ain("JP1-A@U8", Adc.U8, Adc.MUX0) ## door1 pose
@@ -538,8 +553,9 @@ class CO2(Ain):
         co2_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
 
     def appendAdcValue(self, value):
-        ## TODO convert as appropriate
-        self.appendValue(value)
+        value = value
+        volts = value/1000  ## TODO get this converted to engineering units
+        self.appendValue(volts)
         pass
 
 co2_whvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switched--unique CO2 sensor on same ADC
@@ -637,7 +653,10 @@ class Xbee(Sensor):
         pass
 
     def appendAdcValue(self, value):
-        self.appendValue(value)
+        value = value 
+        #print '\t'+str(self.name),value*0.001173,"volts",sensor.adc
+        volts = value*0.001173 # per xbee adc conversion to volts
+        self.appendValue(volts)
         pass
 
 xbee = []  #these are to be defined in LoggerMain from LoggerConfig values 

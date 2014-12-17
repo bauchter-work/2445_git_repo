@@ -79,34 +79,7 @@ for control in Lib.controls:
 UART.setup("UART4")
 ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1) #this is a letter "Oh"-4
 
-
 ADS1115=0x01 # Defined for Adafruit ADC Library 
-
-
-###########################################################################################
-## smoke tests / sanity checks
-if False: ## TODO: needs update
-    print("decimal."), 
-    print(getcontext()) ## for module decimal 
-
-    print("class Adc {}".format(Lib.Adc.__doc__)) ## https://docs.python.org/2/library/inspect.html
-    for item in Lib.adcs:
-        print("adc: {}  bus: {}  addr: 0x{:02x}".format(item.name, item.bus, item.addr))
-
-    #print
-    for item in Lib.sensors:
-        if isinstance(item, Lib.Ain):
-            print("ain: {}  bus: {}  addr: 0x{:02x}  gain: {}  sps: {}  mux: {}"
-                .format(item.name, item.adc.bus, item.adc.addr, item.adc.gain, item.adc.sps, item.mux))
-        elif isinstance(item, Lib.Gpi):
-            print("gpi: {}  pin: {}  ".format(item.name, item.pin))
-        elif isinstance(item, Lib.Ser):
-            print("sio: {}  uart: {}  ".format(item.name, item.uart))
-        else:
-            print("unk: {}  ???  ".format(item.name))
-
-    for control in Lib.controls:
-        print("control: {}  pin: {}  ".format(control.name, control.pin))
 
 ###########################################################################################
 ## local functions
@@ -137,9 +110,8 @@ def fetchXbee(data):
                         for x in samplesDict:
                             for y in x: 
                                 if matchAddress and str(y) == str(sensor.adc):
-                                    #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc
-                                    volts = x[y]*0.001173 # per xbee adc conversion to volts
-                                    sensor.appendValue(volts)
+                                    #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc 
+                                    sensor.appendAdcValue(x[y]) # convert and record into volts
     except:
         print ("unable to print or parse xbee data")
     pass
@@ -201,21 +173,15 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                     else: #if (job == 2): ## fetch
                         try:
                             Value = adc.fetchAdc()
-                            Volts = Value/1000
-                            if sensor.name[0:2] == "TC":
-                                #print("this is a TC."),  #DBG
-                                if (sensor.name == "TC15@U15") or (sensor.name=="TC16@U15"):
-                                    result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
-                                else:
-                                    result = (360*Volts)+32 #for deg. F
-                                #print("{} \tResult: {}F, Gain:{}, I2C Address: 0x{:02x},Input:{}"\  ## See new print below
-                                #    .format(sensor.name,result,adc.pga,adc.addrs[sensor.adcIndex],sensor.mux))
+                            if sensor.name[0:2] == "TC":  #perhaps break the conversion out from the read cycle?
+                                sensor.appendAdcValue(Value) # conversions for Tcs are performed in AdcValue.
+                                result = sensor.getLastVal()
                             else:
                                 #print("this is not a TC."),  #DBG
-                                result = Value #TODO conversions?
+                                result = Value #TODO other conversions?
                                 #print("{} \tResult: {}mV"\
                                 #    .format(sensor.name,result))
-                            sensor.appendAdcValue(result)   ## TODO caution - should append only if accumulating longer record
+                                sensor.appendAdcValue(result)   ## TODO caution - should append only if accumulating longer record
                             print("{:6.2f} " .format(result), end='')    ## DWC 12.16 put output on one line for readability
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
@@ -260,7 +226,7 @@ def fetchPressure():
     if count != 0.0:
         pressureAvg = pressureAvg/count
     ## DWC 12.14 uncommented print statements    
-    print("count is: {}".format(count), end='')
+    print("count is: {} ".format(count), end='')
     print("pressureAvg is: {}".format(pressureAvg))
     return pressureAvg
     pass
@@ -538,7 +504,7 @@ while True:
                 valveco2 = 5        
             co2starttime = scantime
         elif (mon.getstate() == 5):      ## Starting 1-min CO2 sampling during Off period
-            if(waterHeaterIsPresent):    ## Priority to water heater ifpresent
+            if(Conf.waterHeaterIsPresent):    ## Priority to water heater ifpresent
                 valveco2 = 4    ## Verify valve numbers
             else: 
                 valveco2 = 5  #start 
