@@ -36,6 +36,13 @@ import serial
 CO2VALVECYCLE = 20   ## CO2 valve operating cycle (sec)
 CO2CLEARTIME  = 10   ## Time allowed for clearing CO2 system, good data comes after this
 PRESSVALVECYCLE = 3
+NaN = float('NaN')
+
+#Record keeping
+HEADER_REC = 0
+UNITS_REC = 1
+SINGLE_SCAN_REC = 2
+MULTI_SCAN_REC = 3
 
 ###########################################################################################
 ## setup / initialize
@@ -207,7 +214,11 @@ def fetchPressure():
     count = 0
     for i in range(25):
         previous = time.time()
-        pressure_inH20 = Lib.p_zero.readPressure()
+        try: 
+            pressure_inH20 = Lib.p_zero.readPressure()
+        except: 
+            pressure_inH20 = NaN
+            print("Pressure Reading Exception caught")
         if math.isnan(pressure_inH20):
             count -=1
         else:
@@ -306,13 +317,93 @@ class Mon(object):
 #############
 ## setup Xbee (must be after def of fetchXbee)
 xbee = zigbee.ZigBee(ser,callback=fetchXbee)  # for uart4 xbee coordinator
-xBeeNodes = [ Conf.xBeeNode1, Conf.xBeeNode2, Conf.xBeeNode3 ] # create a list from value set
+try:
+    xBeeNodes = [ Conf.xBeeNode1, Conf.xBeeNode2, Conf.xBeeNode3 ] # create a list from value set
+    xBeeNodeTypes = [ Conf.xBeeNode1Type, Conf.xBeeNode2Type, Conf.xBeeNode3Type ] 
+    # TODO further error checking of these inputs
+except:
+    print("Error Parsing Xbee Addresses and Types from the Configuration File. Exiting")
+    sys.exit()
+    
 for x in range(len(xBeeNodes)):  # for each xbee end node in the network
     nodeAddress = xBeeNodes[x]
     xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=0,address=nodeAddress,use=True)   #adc-1
     Lib.sensors.extend([xbeeTemp])
     xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=1,address=nodeAddress,use=True)   #adc-2
     Lib.sensors.extend([xbeeTemp])
+    # now instantiate all the xbee Params list for record keeping.  This could be made prettier...
+    if (x == 0):
+        n_xbee1 = Lib.Param(["n_xbee1"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
+        if (xBeeNodeTypes[0] == "none"):
+            vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[NaN])       # empty set
+            vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[NaN])       # empty set
+            vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[NaN])    # empty set
+            vbatt_xbee1 = Lib.Param(["vbatt_xbee1"],["NA"],[NaN])  # empty
+        elif (xBeeNodeTypes[0] == "CT"):
+            vi_xbee1 = Lib.AinParam("vi_xbee1", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
+            vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[NaN])       # empty set
+            vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[NaN])    # empty set
+        elif (xBeeNodeTypes[0] == "Pressure"):
+            vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[NaN]) # empty set
+            vp_xbee1 = Lib.AinParam("vp_xbee1", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
+            vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[NaN]) #empty set
+        elif (xBeeNodeTypes[0] == "Door"):
+            vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[NaN]) # empty set
+            vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[NaN]) # empty set
+            vpos_xbee1 = Lib.AinParam("vpos_xbee1",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
+        if (xBeeNodeTypes[0] != "none"):
+            #always add vbatt, if xbee exists
+            vbatt_xbee1 = Lib.AinParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+        Lib.params.extend([n_xbee1, vi_xbee1, vp_xbee1, vpos_xbee1, vbatt_xbee1])
+        print("Xbee {} Address is {}".format(x,nodeAddress))
+    if (x == 1):
+        n_xbee2 = Lib.Param(["n_xbee2"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
+        if (xBeeNodeTypes[1] == "none"):
+            vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[NaN])       # empty set
+            vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[NaN])       # empty set
+            vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[NaN])    # empty set
+            vbatt_xbee2 = Lib.Param(["vbatt_xbee2"],["NA"],[NaN])  # empty
+        elif (xBeeNodeTypes[1] == "CT"):
+            vi_xbee2 = Lib.AinParam("vi_xbee2", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
+            vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[NaN])       # empty set
+            vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[NaN])    # empty set
+        elif (xBeeNodeTypes[1] == "Pressure"):
+            vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[NaN]) # empty set
+            vp_xbee2 = Lib.AinParam("vp_xbee2", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
+            vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[NaN]) #empty set
+        elif (xBeeNodeTypes[1] == "Door"):
+            vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[NaN]) # empty set
+            vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[NaN]) # empty set
+            vpos_xbee2 = Lib.AinParam("vpos_xbee2",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
+        if (xBeeNodeTypes[1] != "none"):
+            #always add vbatt, if xbee exists
+            vbatt_xbee2 = Lib.AinParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+        Lib.params.extend([n_xbee2, vi_xbee2, vp_xbee2, vpos_xbee2, vbatt_xbee2])
+        print("Xbee {} Address is {}".format(x,nodeAddress))
+    if (x == 2):
+        n_xbee3 = Lib.Param(["n_xbee3"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
+        if (xBeeNodeTypes[2] == "none"):
+            vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[NaN])       # empty set
+            vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[NaN])       # empty set
+            vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[NaN])    # empty set
+            vbatt_xbee3 = Lib.Param(["vbatt_xbee3"],["NA"],[NaN])  # empty
+        elif (xBeeNodeTypes[2] == "CT"):
+            vi_xbee3 = Lib.AinParam("vi_xbee3", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
+            vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[NaN])       # empty set
+            vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[NaN])    # empty set
+        elif (xBeeNodeTypes[2] == "Pressure"):
+            vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[NaN]) # empty set
+            vp_xbee3 = Lib.AinParam("vp_xbee3", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
+            vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[NaN]) #empty set
+        elif (xBeeNodeTypes[2] == "Door"):
+            vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[NaN]) # empty set
+            vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[NaN]) # empty set
+            vpos_xbee3 = Lib.AinParam("vpos_xbee3",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
+        if (xBeeNodeTypes[2] != "none"):
+            #always add vbatt, if xbee exists
+            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+        Lib.params.extend([n_xbee3, vi_xbee3, vp_xbee3, vpos_xbee3, vbatt_xbee3])
+        print("Xbee {} Address is {}".format(x,nodeAddress))
 
 Lib.Adc.debug = False
 AdaAdcU11 = ADS1x15(ic=ADS1115,address=0x48,busnum=2)
@@ -327,6 +418,20 @@ wh = Lib.waterHtr
 f = Lib.furnace
 
 mon = Mon()
+
+#Generate a Filename and Path (for Records)
+dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+Conf.siteName+"_Data.csv"
+#Generate a Filename and Path (for Info/Diagnostics)
+diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+Conf.siteName+"_Info.csv"
+
+#Record headers to Data File (for Records)
+dataFile = open(dataFilename,'ab')
+dataFile.write(Lib.record(HEADER_REC))
+dataFile.close()
+#TODO Record Units?
+
+#Record diagnostics information
+
 
 ## determine the current state
 ## DWC 12.14 I don't think we want to fetch here, rather just start scans, and 
@@ -611,6 +716,11 @@ while True:
     
   except KeyboardInterrupt: #DBG This is for debug (allows xbee halt and serial cleanup)
     break
-#cleanup 
+
+## cleanup 
 xbee.halt()
 ser.close()
+try: 
+    dataFile.close()
+except:
+    print("Unable to close the DAT file currently being used")

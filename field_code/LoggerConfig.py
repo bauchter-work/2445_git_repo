@@ -11,10 +11,15 @@ waterHeaterIsPresent = True ## True or False - update if present
 furnaceIsPresent = True     ## True or False
 xBeeNode1 = "0x6dfe"        ## Declare End Node addresses for deployed xBee sensors (last 4 hex digits 
                             ##  in the long address of the xbee.
-xBeeNode2 = "0xffff"        ## Node 2, use "0xffff" if not deployed
-xBeeNode3 = "0xffff"        ## Node 3, use "0xffff" if not deployed
+xBeeNode1Type = "CT"  #type "CT", "Pressure", "Door", "none"
 
-savePath = "/root/uSDcard/data/" ## location to store data on BBB
+xBeeNode2 = "0xffff"        ## Node 2, use "0xffff" if not deployed
+xBeeNode2Type = "none" #type "CT", "Pressure", "Door", "none"
+
+xBeeNode3 = "0xffff"        ## Node 3, use "0xffff" if not deployed
+xBeeNode3Type = "none" #type "CT", "Pressure", "Door", "none"
+
+savePath = "/root/data/" ## location to store data on BBB
 
 maxFileSize = 750000000     ## Maximum data filesize before creating a new data file (don't exceed 1GB)
 

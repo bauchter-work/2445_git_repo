@@ -943,9 +943,9 @@ class Param(object):
         else: 
             self.values[0] = value
 
-siteid = Param(["site"], [""], ["MSP___"])
+siteid = Param(["site"], [""], ["Conf.siteName"])
 timest = Param(["time"], [""], [TIME(now())])
-recnum = Param(["rec_num"])
+recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
 
@@ -1079,27 +1079,6 @@ sec_fcooldown = Param(["sec_fcooldown"]) # accumulated cool time, set to 0 when 
 sec_count = Param(["sec_count"]) # divisor to calculate averages over the record period. # of secs since last rec
 params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
 
-n_xbee1 = Param(["n_xbee1"]) # number of values accumulated from xbee1 since last record (for averaging values)
-vi_xbee1 = Param(["vi_xbee1"]) # voltage value of a current reading (should be "NaN" if not measuring current)
-vp_xbee1 = Param(["vp_xbee1"]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
-vpos_xbee1 = Param(["vpos_xbee1"]) # voltage value of door position, if any ("NaN" if not)
-vbatt_xbee1 = Param(["vbatt_xbee1"]) # battery voltage (should always read, NaN if zero values accumulated)
-params.extend([n_xbee1, vi_xbee1, vp_xbee1, vpos_xbee1, vbatt_xbee1])
-
-n_xbee2 = Param(["n_xbee2"]) # number of values accumulated from xbee2 since last record (to average readings)
-vi_xbee2 = Param(["vi_xbee2"]) # voltage value of a current reading (should be "NaN" if not measuring current)
-vp_xbee2 = Param(["vp_xbee2"]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
-vpos_xbee2 = Param(["vpos_xbee2"]) # voltage value of door position, if any ("NaN" if not)
-vbatt_xbee2 = Param(["vbatt_xbee2"]) # battery voltage (should always read, NaN if zero values accumulated)
-params.extend([n_xbee2, vi_xbee2, vp_xbee2, vpos_xbee2, vbatt_xbee2])
-
-n_xbee3 = Param(["n_xbee3"]) # number of values accumulated from xbee3 since last record (used to average)
-vi_xbee3 = Param(["vi_xbee3"]) # voltage value of a current reading (should be "NaN" if not measuring current)
-vp_xbee3 = Param(["vp_xbee3"]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
-vpos_xbee3 = Param(["vpos_xbee3"]) # voltage value of door position, if any ("NaN" if not)
-vbatt_xbee3 = Param(["vbatt_xbee3"]) # battery voltage (should always read, NaN if zero values accumulated)
-params.extend([n_xbee3, vi_xbee3, vp_xbee3, vpos_xbee3, vbatt_xbee3])
-
 
 #####################################################
 
@@ -1109,6 +1088,7 @@ SingleScanRec = 2
 MultiScanRec = 3
 
 def record(recType):
+    returnString = ""
     for param in params:
         fields = None
         if (recType == HeaderRec):
@@ -1123,8 +1103,10 @@ def record(recType):
         for field in fields:
             if (param == params[-1]) and (field == fields[-1]):
                 print("{}".format(field), end='\n') #last item
+                returnString = returnString+str(field)+'\n'
             else:
                 print("{}, ".format(field), end='') #end='\n'
+                returnString = returnString+str(field)+','
     print("-End of record print-")
+    return returnString
 
-record(HeaderRec)
