@@ -17,6 +17,7 @@
 ## 2014.12.16 DanC - made some changes to state controller, add import datetime, change screen print
 ##                 - added from __future__ import print, changed all old print statements to print()
 ##                 - added control of pressure and CO2 valves 
+## 2014.12.27 DanC - rearranged print statements to show output on one line only, starting with time (sec into GMT day)
 ## 
  
 from __future__ import print_function
@@ -193,8 +194,7 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
                                     .format(sensor.name, adc.addr, mux, err))
-    print('\n')
-
+    #print('\n')    ## DWC 121.26 comment out to create a single output line for inspection of data
 
     ## print in initial order
     ## DWC 12.14 comment out while using job-specific print statements above
@@ -236,9 +236,10 @@ def fetchPressure():
 
     if count != 0.0:
         pressureAvg = pressureAvg/count
-    ## DWC 12.14 uncommented print statements    
-    print("count is: {} ".format(count), end='')
-    print("pressureAvg is: {}".format(pressureAvg))
+    ## TEST PRINT
+    if False:   
+        print("count is: {} ".format(count), end='')
+        print("pressureAvg is: {}".format(pressureAvg))
     return pressureAvg
     pass
 
@@ -459,6 +460,9 @@ while True:
     ## DWC changed "tick" to "scantime".  This does appear to be real time (sample value 1418757518.0 sec ~< 45 yrs)
     scantime = Lib.Timer.stime()      
     #print("time at top of loop: {}".format(scantime))
+    ## TEST PRINT
+    if True: 
+        print("{:>6.0f}" .format(scantime % 86400.0), end='')    ## % 86400 converts to seconds into GMT day, for testing only
 
     ## Scan all inputs
     fetchAdcInputs() 
@@ -466,6 +470,10 @@ while True:
     #fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
     ## DWC 12.14 trial of fetch pressure() in line
     currentpressure = fetchPressure()
+    ## TEST PRINT
+    if True:
+        print("{:>9.5f}".format(currentpressure), end='')    ## Not sure how extra newline in output is generated
+
     #print("Pressure now: {}".format(currentpressure))    ## DWC 12.16 drop for now, is printed within pressure routine
     
     #This following for loop for DBG  
@@ -498,7 +506,8 @@ while True:
     ## Assign operating mode of wh and furnace
     whmode = wh.calcMode() ## also updates status (if burner is present) ## TODO
     fmode = f.calcMode() ## also updates status (if burner is present) ## TODO
-    if True:      ## DWC 12.14 activated to test (was if False:)
+    ## TEST PRINT
+    if False:      ## DWC 12.14 activated to test (was if False:)
         print("furn temp: {:>5.1f}  fstatus:  {}  fmode: {} fprevMode: {} "\
                 .format(f.tc.getLastVal(), f.getStatus(), fmode, f.prevMode))
         ## DWC 121.14 added similar print for wh:
@@ -539,7 +548,9 @@ while True:
         ## else no change
     ## else no change
     ## DWC 12.16 moved print statement to after state is set
-    print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
+    ## TEST PRINT
+    if False:     
+        print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
             .format(scantime, mon.state, mon.prevState, Lib.sw1.getValue()))
 
     #for sensor in Lib.sensors:
@@ -659,8 +670,10 @@ while True:
         Lib.co2_zone_valve.setValue(0)
         Lib.controls[7].setValue(0)     ## Pump
 
-    print ("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
-    .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
+    ## TEST PRINT
+    if False:     
+        print ("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
+            .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
                    
     
     ## TODO Record control
