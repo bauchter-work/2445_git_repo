@@ -18,7 +18,9 @@
 ##                 - added from __future__ import print, changed all old print statements to print()
 ##                 - added control of pressure and CO2 valves 
 ## 2014.12.27 DanC - rearranged print statements to show output on one line only, starting with time (sec into GMT day)
-## 
+##                 - dropped xbee print statement for testing
+##                 - 
+
  
 from __future__ import print_function
 
@@ -101,7 +103,8 @@ def get_free_space_bytes(folder):
 
 def fetchXbee(data):
     try:
-        print("Xbee data Received")
+        if False:       ## TEST PRINT
+            print("Xbee data Received")
         for sensor in Lib.sensors:
             if isinstance(sensor, Lib.Xbee):
                 matchAddress = False
@@ -236,8 +239,7 @@ def fetchPressure():
 
     if count != 0.0:
         pressureAvg = pressureAvg/count
-    ## TEST PRINT
-    if False:   
+    if False:      ## TEST PRINT
         print("count is: {} ".format(count), end='')
         print("pressureAvg is: {}".format(pressureAvg))
     return pressureAvg
@@ -460,8 +462,7 @@ while True:
     ## DWC changed "tick" to "scantime".  This does appear to be real time (sample value 1418757518.0 sec ~< 45 yrs)
     scantime = Lib.Timer.stime()      
     #print("time at top of loop: {}".format(scantime))
-    ## TEST PRINT
-    if True: 
+    if True:     ## TEST PRINT
         print("{:>6.0f}" .format(scantime % 86400.0), end='')    ## % 86400 converts to seconds into GMT day, for testing only
 
     ## Scan all inputs
@@ -470,8 +471,7 @@ while True:
     #fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
     ## DWC 12.14 trial of fetch pressure() in line
     currentpressure = fetchPressure()
-    ## TEST PRINT
-    if True:
+    if True:        ## TEST PRINT
         print("{:>9.5f}".format(currentpressure), end='')    ## Not sure how extra newline in output is generated
 
     #print("Pressure now: {}".format(currentpressure))    ## DWC 12.16 drop for now, is printed within pressure routine
@@ -506,8 +506,7 @@ while True:
     ## Assign operating mode of wh and furnace
     whmode = wh.calcMode() ## also updates status (if burner is present) ## TODO
     fmode = f.calcMode() ## also updates status (if burner is present) ## TODO
-    ## TEST PRINT
-    if False:      ## DWC 12.14 activated to test (was if False:)
+    if False:          ## TEST PRINT
         print("furn temp: {:>5.1f}  fstatus:  {}  fmode: {} fprevMode: {} "\
                 .format(f.tc.getLastVal(), f.getStatus(), fmode, f.prevMode))
         ## DWC 121.14 added similar print for wh:
@@ -548,8 +547,7 @@ while True:
         ## else no change
     ## else no change
     ## DWC 12.16 moved print statement to after state is set
-    ## TEST PRINT
-    if False:     
+    if False:         ## TEST PRINT
         print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
             .format(scantime, mon.state, mon.prevState, Lib.sw1.getValue()))
 
@@ -670,8 +668,7 @@ while True:
         Lib.co2_zone_valve.setValue(0)
         Lib.controls[7].setValue(0)     ## Pump
 
-    ## TEST PRINT
-    if False:     
+    if False:         ## TEST PRINT
         print ("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
             .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
                    
