@@ -123,6 +123,7 @@ def fetchXbee(data):
                                 if matchAddress and str(y) == str(sensor.adc):
                                     #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc 
                                     sensor.appendAdcValue(x[y]) # convert and record into volts
+
     except:
         print ("unable to print or parse xbee data")
     pass
@@ -279,11 +280,15 @@ def write1secRecord():      # DC 11.28
     # wHen writing 1-second records, we simply write sensor.currentvalue 
     #  to the data record 
     # Number of samples = 1
-    # Increment record number integer
+    # Increment record number integer (done in LoggerLib).
+
     # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
     # Place data values in record string (see xlsx file for list of parameters)
     # Min and max values will simply be set to the single parameter value
     # Append record string to file
+    dataFile = open(dataFilename,'ab')
+    dataFile.write(Lib.record(SINGLE_SCAN_REC)+'\n')
+    dataFile.close()
     # Clear accumulator objects (may not be necessary)
     pass
 
@@ -544,6 +549,7 @@ while True:
     ## Capture time at top of second
     ## DWC changed "tick" to "scantime".  This does appear to be real time (sample value 1418757518.0 sec ~< 45 yrs)
     scantime = Lib.Timer.stime()      
+    Lib.timest.setValue(Lib.TIME(scantime)) # track/record latest timestamp
     #print("time at top of loop: {}".format(scantime))
     if True:     ## TEST PRINT
         print("{:>6.0f}" .format(scantime % 86400.0), end='')    ## % 86400 converts to seconds into GMT day, for testing only
@@ -780,10 +786,7 @@ while True:
     # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
     #  a single scan.  :TODO
     #if (mon.state in current_state_1sec):
-    #    write1secRecord()
-    dataFile = open(dataFilename,'ab')
-    dataFile.write(Lib.record(SINGLE_SCAN_REC)+'\n')
-    dataFile.close()
+    write1secRecord()
     #else:
     #    accumulateValues()    # Accumulate values only when not currently in 1-sec
     
@@ -806,6 +809,8 @@ while True:
     #    print "Disk is full. Exiting"
     #    sys.exit()
 
+    executiontime = time.time()-scantime
+    print (" scan execution time: {} seconds".format(executiontime))
     Lib.Timer.sleep()
     pass
     print()

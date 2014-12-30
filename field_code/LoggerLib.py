@@ -915,7 +915,7 @@ class Timer(object):
 ## record parameters
 
 def TIME(tm):
-    return "{}".format(tm)
+    return time.strftime("\"%Y-%m-%d %H:%M:%S\"",time.gmtime(tm))
 
 class Param(object):
     """includes all parameters to be reported"""
@@ -944,7 +944,7 @@ class Param(object):
             self.values[0] = value
 
 siteid = Param(["site"], [""], [Conf.siteName])
-timest = Param(["time"], [""], [TIME(now())])
+timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
@@ -1098,8 +1098,18 @@ def record(recType):
             fields = param.reportUnits()
         elif (recType == SingleScanRec):
             fields = param.reportScanData()
+            # Increment record number integer
+            if param.reportHeaders() == ['rec_num']:
+                #print("prev_recnum is:{}".format(fields[0]))
+                param.setValue(fields[0]+1)
+                #print("new recnum value:{}".format(param.reportScanData()))
         elif (recType == MultiScanRec):
             fields = param.reportStatData()
+            # Increment record number integer
+            if param.reportHeaders() == ['rec_num']:
+                #print("prev_recnum is:{}".format(fields[0]))
+                param.setValue(fields[0]+1)
+                #print("new recnum value:{}".format(param.reportScanData()))
         #print("Fields:{}".format(fields))
         for field in fields:
             if (param == params[-1]) and (field == fields[-1]):
