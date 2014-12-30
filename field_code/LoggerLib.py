@@ -1039,7 +1039,7 @@ class CO2Param(SampledParam):
     def reportStatData(self): ## override
         return [self.avgVal(), self.minVal(), self.maxVal()]
 
-co2_valve_pos = Param(["loc_co2"],["integer"],[NaN]) ## ad hoc param for reporting co2 valve position
+co2_valve_pos = Param(["loc_co2"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting co2 valve position
 co2_valve_time = Param(["sec_co2"],["integer"],[0]) ## ad hoc param for reporting co2 valve open time--TODO: should report duration
 whventco2 = CO2Param("whvent", co2_whvent)
 fventco2 = CO2Param("fvent", co2_fvent)
@@ -1050,15 +1050,15 @@ class PressureParam(SampledParam):
     """includes all pressure (sampled) parameters"""
     def __init__(self, loc, sensor):
         fix = "p_"+loc
-        SampledParam.__init__(self, [fix+"", fix+"_min", fix+"_max", fix+"_rng", fix+"_rng_min", fix+"_rng_max"], ["kpa", "kpa", "kpa", "kpa", "kpa"], loc, sensor) 
+        SampledParam.__init__(self, [fix+"", fix+"_min", fix+"_max", fix+"_rng", fix+"_rng_min", fix+"_rng_max"], ["kpa", "kpa", "kpa", "kpa", "kpa", "kpa"], loc, sensor) 
 
     def reportScanData(self): ## override
-        return [self.val(), self.val(), self.val()]
-
+        return [self.val(), self.val(), self.val(), self.val(), self.val(), self.val()] #TODO change range value outputs to match
+ 
     def reportStatData(self): ## override
-        return [self.avgVal(), self.minVal(), self.maxVal()]
+        return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] #TODO change range value outputs
 
-p_valve_pos = Param(["loc_p"],["integer"],[NaN]) ## ad hoc param for reporting pressure valve position
+p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
 p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time--TODO: should report duration
 zeropress = PressureParam("zero", p_zero) ## TODO: these should be different sensors
 whventpress = PressureParam("whvent", p_whvent)
@@ -1066,9 +1066,9 @@ fventpress = PressureParam("fvent", p_fvent)
 zonepress = PressureParam("zone", p_zone)
 params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
 
-whburner = Param(["wh_status", "wh_mode"],["integer","integer"],[NaN,NaN]) #TODO check - is this correct?
-fburner = Param(["f_status", "f_mode"],["integer","integer"],[NaN,NaN]) #TODO Check - is this correct?
-monitor = Param(["sys_state"],["integer"],[NaN])
+whburner = Param(["wh_status", "wh_mode"],["integer","integer"],[DEC(NaN),DEC(NaN)]) #TODO check - is this correct?
+fburner = Param(["f_status", "f_mode"],["integer","integer"],[DEC(NaN),DEC(NaN)]) #TODO Check - is this correct?
+monitor = Param(["sys_state"],["integer"],[DEC(NaN)])
 params.extend([whburner, fburner, monitor])
 
 scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
@@ -1091,7 +1091,7 @@ def record(recType):
     returnString = ""
     for param in params:
         fields = None
-        #print("Param is: {}".format(param))
+        #print("Param(s): {}".format(param.reportHeaders()))
         if (recType == HeaderRec):
             fields = param.reportHeaders()
         elif (recType == UnitsRec):
@@ -1103,11 +1103,11 @@ def record(recType):
         #print("Fields:{}".format(fields))
         for field in fields:
             if (param == params[-1]) and (field == fields[-1]):
-                print("{}".format(field), end='\n') #last item
+                #print("{}".format(field), end='\n') #last item
                 returnString = returnString+str(field)+'\n'
             else:
-                print("{}, ".format(field), end='') #end='\n'
+                #print("{}, ".format(field), end='') #end='\n'
                 returnString = returnString+str(field)+','
-    print("-End of record print-")
+    #print("\n-End of record print-")
     return returnString
 
