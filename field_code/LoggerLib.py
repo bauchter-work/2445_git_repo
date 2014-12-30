@@ -943,14 +943,14 @@ class Param(object):
         else: 
             self.values[0] = value
 
-siteid = Param(["site"], [""], ["Conf.siteName"])
+siteid = Param(["site"], [""], [Conf.siteName])
 timest = Param(["time"], [""], [TIME(now())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
 
 def DEC(number):
-    return "{:d}".format(number)
+    return Decimal(number) #"{:d}".format(number)
 
 class SampledParam(Param):
     """includes all sensed/sampled parameters to be reported"""
@@ -1039,8 +1039,8 @@ class CO2Param(SampledParam):
     def reportStatData(self): ## override
         return [self.avgVal(), self.minVal(), self.maxVal()]
 
-co2_valve_pos = Param(["loc_co2"]) ## ad hoc param for reporting co2 valve position
-co2_valve_time = Param(["sec_co2"]) ## ad hoc param for reporting co2 valve open time--TODO: should report duration
+co2_valve_pos = Param(["loc_co2"],["integer"],[NaN]) ## ad hoc param for reporting co2 valve position
+co2_valve_time = Param(["sec_co2"],["integer"],[0]) ## ad hoc param for reporting co2 valve open time--TODO: should report duration
 whventco2 = CO2Param("whvent", co2_whvent)
 fventco2 = CO2Param("fvent", co2_fvent)
 zoneco2 = CO2Param("zone", co2_zone)
@@ -1058,25 +1058,25 @@ class PressureParam(SampledParam):
     def reportStatData(self): ## override
         return [self.avgVal(), self.minVal(), self.maxVal()]
 
-p_valve_pos = Param(["loc_p"]) ## ad hoc param for reporting pressure valve position
-p_valve_time = Param(["sec_p"]) ## ad hoc param for reporting pressure valve open time--TODO: should report duration
+p_valve_pos = Param(["loc_p"],["integer"],[NaN]) ## ad hoc param for reporting pressure valve position
+p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time--TODO: should report duration
 zeropress = PressureParam("zero", p_zero) ## TODO: these should be different sensors
 whventpress = PressureParam("whvent", p_whvent)
 fventpress = PressureParam("fvent", p_fvent)
 zonepress = PressureParam("zone", p_zone)
 params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
 
-whburner = Param(["wh_status", "wh_mode"])
-fburner = Param(["f_status", "f_mode"])
-monitor = Param(["sys_state"])
+whburner = Param(["wh_status", "wh_mode"],["integer","integer"],[NaN,NaN]) #TODO check - is this correct?
+fburner = Param(["f_status", "f_mode"],["integer","integer"],[NaN,NaN]) #TODO Check - is this correct?
+monitor = Param(["sys_state"],["integer"],[NaN])
 params.extend([whburner, fburner, monitor])
 
-scans_accum = Param(["scans_accum"]) # cleared every time a record is written
-sec_whrun = Param(["sec_whrun"]) # total accumulated run time, but output zero at end of 60-sec records
-sec_frun = Param(["sec_frun"]) # total accumulated run time, but always value of zero at end of 60sec recs
-sec_whcooldown = Param(["sec_whcooldown"]) # accumulated cool time, set to 0 when in state 5 or 6
-sec_fcooldown = Param(["sec_fcooldown"]) # accumulated cool time, set to 0 when in state 5 or 6
-sec_count = Param(["sec_count"]) # divisor to calculate averages over the record period. # of secs since last rec
+scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
+sec_whrun = Param(["sec_whrun"],["integer"],[0]) # total accumulated run time, but output zero at end of 60-sec records
+sec_frun = Param(["sec_frun"],["integer"],[0]) # total accumulated run time, but always value of zero at end of 60sec recs
+sec_whcooldown = Param(["sec_whcooldown"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+sec_fcooldown = Param(["sec_fcooldown"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages over the record period. # of secs since last rec
 params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
 
 
@@ -1091,6 +1091,7 @@ def record(recType):
     returnString = ""
     for param in params:
         fields = None
+        #print("Param is: {}".format(param))
         if (recType == HeaderRec):
             fields = param.reportHeaders()
         elif (recType == UnitsRec):
