@@ -660,7 +660,7 @@ class Xbee(Sensor):
         pass
 
 xbee = []  #these are to be defined in LoggerMain from LoggerConfig values 
-sensors.extend([xbee])
+sensors.extend(xbee)
 
 P8_7 = 7
 P8_8 = 8
@@ -1111,13 +1111,15 @@ def record(recType):
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
         #print("Fields:{}".format(fields))
+        commaIndex = 0
         for field in fields:
-            if (param == params[-1]) and (field == fields[-1]):
-                #print("{}".format(field), end='\n') #last item
-                returnString = returnString+str(field)+'\n'
+            if (param == params[-1]) and (commaIndex == (len(fields)-1)):
+                #print("field:{} of fields:{}".format(field,fields), end='\n') #last item
+                returnString = returnString+str(field)+'' #rely on filewrite to add own \n
             else:
                 #print("{}, ".format(field), end='') #end='\n'
                 returnString = returnString+str(field)+','
+            commaIndex = commaIndex + 1
     #print("\n-End of record print-")
     return returnString
 

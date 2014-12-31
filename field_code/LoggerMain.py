@@ -106,8 +106,9 @@ def fetchXbee(data):
         if False:       ## TEST PRINT
             print("Xbee data Received")
         for sensor in Lib.sensors:
-            if isinstance(sensor, Lib.Xbee):
+            if isinstance(sensor, Lib.Xbee): #xbee-0,xbee-1,xbee-2
                 matchAddress = False
+                matchName = ""
                 for item in data:
                     #print "item is",str(item)
                     if (str(item) == 'source_addr_long'):
@@ -115,15 +116,27 @@ def fetchXbee(data):
                         #print "addr_long is:",str(data[item].encode("hex")[12:16])
                         if ("0x"+str(data[item].encode("hex")[12:16])) == sensor.address:
                             matchAddress = True
+                            matchName = sensor.name
                             #print "\tThere is a match",sensor.address
                     elif str(item) == 'samples':
                         samplesDict = data[item]
-                        for x in samplesDict:
-                            for y in x: 
-                                if matchAddress and str(y) == str(sensor.adc):
+                        for x in samplesDict: #x will have several items, limit the selection
+                            for y in x:  #There should only be 2 of interest in this list
+                                if matchAddress and str(y) == str(sensor.adc):  #adc-1 or adc-2
                                     #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc 
                                     sensor.appendAdcValue(x[y]) # convert and record into volts
-
+                                    if y == "adc-1": # increment correct n_xbee only once
+                                        for param in Lib.params:
+                                            fields = param.reportScanData()
+                                            if (param.reportHeaders() == ['n_xbee1']) and sensor.name == "xbee-0":
+                                                #print("n_xbee1 and xbee-0 Match")
+                                                param.setValue(fields[0]+1)
+                                            elif (param.reportHeaders() == ['n_xbee2']) and sensor.name == "xbee-1":
+                                                #print("n_xbee2 and xbee-1 Match")
+                                                param.setValue(fields[0]+1)
+                                            elif (param.reportHeaders() == ['n_xbee3']) and sensor.name == "xbee-2":
+                                                #print("n_xbee3 and xbee-2 Match")
+                                                param.setValue(fields[0]+1)
     except:
         print ("unable to print or parse xbee data")
     pass
@@ -517,7 +530,7 @@ diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmti
 
 #Record headers to Data File (for Records)
 dataFile = open(dataFilename,'ab')
-dataFile.write(Lib.record(HEADER_REC))
+dataFile.write(Lib.record(HEADER_REC)+"\n")
 dataFile.close()
 #TODO Record Units?
 
@@ -640,8 +653,12 @@ while True:
         print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
             .format(scantime, mon.state, mon.prevState, Lib.sw1.getValue()))
 
-    #for sensor in Lib.sensors:
-	#	print sensor.name
+    if False:
+        for sensor in Lib.sensors:
+            if isinstance(sensor, Lib.Xbee):
+                print("{} ADC {}".format(sensor.name,sensor.adc))
+            else:
+                print("{}".format(sensor.name))
     		       
     ## Pressure control routine
 
@@ -810,7 +827,7 @@ while True:
     #    sys.exit()
 
     executiontime = time.time()-scantime
-    print (" scan execution time: {} seconds".format(executiontime))
+    print (" scan time: {} seconds".format(executiontime), end='')
     Lib.Timer.sleep()
     pass
     print()
