@@ -1086,6 +1086,17 @@ sec_fcooldown = Param(["sec_fcooldown"],["integer"],[0]) # accumulated cool time
 sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages over the record period. # of secs since last rec
 params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
 
+class XbeeParam(SampledParam):
+    """includes all CO2 (sampled) parameters"""
+    def __init__(self, loc, sensor):
+        fix = loc
+        SampledParam.__init__(self, [fix+""], ["V"], loc, sensor) 
+
+    def reportScanData(self): ## override
+        return [self.val()]
+
+    def reportStatData(self): ## override
+        return [self.avgVal()]
 
 #####################################################
 
