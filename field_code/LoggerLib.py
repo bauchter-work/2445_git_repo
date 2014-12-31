@@ -393,7 +393,7 @@ class Sensor(object):
         self.values = list() ## https://docs.python.org/2/library/stdtypes.html#typesseq-mutable 
         pass
 
-    def clearValues():
+    def clearValues(self):
         self.values = list()
         pass
 
@@ -619,6 +619,12 @@ class Dlvr(I2c, Sensor):
             #Temp_C = (float(Temp)*(float(200)/(2047)))-50
             #print "Temp, converted is: ",Temp_C,"deg. C"
             return Pressure_inH20
+        pass
+
+    def appendAdcValue(self, value):
+        value = value #should come in as in_H20
+        resultPascals = Decimal(value)/Decimal(0.00401463078662)  ## converted to Pascals
+        self.appendValue(resultPascals)
         pass
 
 p_zero = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zero)

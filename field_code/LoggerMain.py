@@ -258,7 +258,7 @@ def fetchPressure():
     if False:      ## TEST PRINT
         print("count is: {} ".format(count), end='')
         print("pressureAvg is: {}".format(pressureAvg))
-    return pressureAvg
+    return pressureAvg # returns oversampled pressure reading in inH20
     pass
 
 # DC 11.28 New functions for building and writing records
@@ -303,6 +303,11 @@ def write1secRecord():      # DC 11.28
     dataFile.write(Lib.record(SINGLE_SCAN_REC)+'\n')
     dataFile.close()
     # Clear accumulator objects (may not be necessary)
+    #print("Lib.sensors:{}".format(Lib.sensors))
+    for sensor in Lib.sensors:
+        #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
+        sensor.clearValues()
+    # clear any Params that accumulate?
     pass
 
 
@@ -586,9 +591,7 @@ while True:
     ## DWC 12.14 trial of fetch pressure() in line
     currentpressure = fetchPressure()
     if True:        ## TEST PRINT
-        print("{:>9.5f}".format(currentpressure), end='')    ## Not sure how extra newline in output is generated
-
-    #print("Pressure now: {}".format(currentpressure))    ## DWC 12.16 drop for now, is printed within pressure routine
+        print("{:>9.5f}".format(currentpressure), end='') 
     
     #This following for loop for DBG  
     for mux in range(Lib.Adc.NMUX):
@@ -678,20 +681,34 @@ while True:
     valvelistpress = [0,1,2,3]       ## Pressure controls are 0, 1, 2, 3
     if (pressstarttime == None):    ## Initialize pressure start on first scan
         valvepress = 0
+        Lib.p_valve_pos.setValue(int(valvepress)) ## set initial value of Parameter "loc_p"
         valveindexpress = 0
         pressstarttime = scantime
     press_elapsed = scantime - pressstarttime
     if (((press_elapsed) >= PRESSVALVECYCLE) or ((press_elapsed) < 0)):
         try:
+            #first store the fetched pressure for the previous valve setting
+            if valvepress == 0:
+                Lib.p_zero.appendAdcValue(currentpressure)
+            elif valvepress == 1:
+                Lib.p_whvent.appendAdcValue(currentpressure)
+            elif valvepress == 2:
+                Lib.p_fvent.appendAdcValue(currentpressure)
+            elif valvepress == 3:
+                Lib.p_zone.appendAdcValue(currentpressure)
             valveindexpress = valvelistpress.index(valvepress)
             valveindexpress += 1
             if valveindexpress == (len(valvelistpress)):
                 valveindexpress = 0
             valvepress = valvelistpress[valveindexpress]  
             pressstarttime = scantime
+            Lib.p_valve_time.setValue(int(0)) # reset time elapsed
+            Lib.p_valve_pos.setValue(int(valvepress)) #update present valve setting
         except:
-                print("could not execute CO2 valve indexing routine")
-    
+            print("could not execute CO2 valve indexing routine")
+    else: #wait for scan cycles before changing valve setting
+        Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) #increment valve dwell counter
+        
     if (mon.getstate() in [4,6]):     ## No CO2 monitoring
         valveco2 = 0           
 
@@ -718,7 +735,6 @@ while True:
         Lib.p_zone_valve.setValue(1)     
     else:
         print("No pressure valve set")
-   
     
     
     
@@ -839,7 +855,7 @@ while True:
     #    sys.exit()
 
     executiontime = time.time()-scantime
-    print (" scan time: {} seconds".format(executiontime), end='')
+    print (" scan time: {:>5.3f} sec".format(round(Decimal(executiontime),3)), end='')
     Lib.Timer.sleep()
     pass
     print()
