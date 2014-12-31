@@ -948,6 +948,7 @@ timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
+diagParams = []
 
 def DEC(number):
     return Decimal(number) #"{:d}".format(number)

@@ -371,7 +371,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vbatt_xbee1_min = Lib.Param(["vbatt_xbee1_min"],["NA"],[Decimal(NaN)]) #empy Min
             vbatt_xbee1_max = Lib.Param(["vbatt_xbee1_max"],["NA"],[Decimal(NaN)]) #empy Max
             Lib.params.extend([n_xbee1, vi_xbee1,vi_xbee1_min,vi_xbee1_max, vp_xbee1,vp_xbee1_min,vp_xbee1_max, \
-                    vpos_xbee1,vpos_xbee1_min,vpos_xbee1_max, vbatt_xbee1,vbatt_xbee1_min,vbatt_xbee1_max])
+                    vpos_xbee1,vpos_xbee1_min,vpos_xbee1_max])
+            Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee1_min,vbatt_xbee1_max])
         elif (xBeeNodeTypes[0] == "CT"):
             vi_xbee1 = Lib.AinParam("vi_xbee1", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[Decimal(NaN)])       # empty set
@@ -382,7 +383,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee1_max = Lib.Param(["vpos_xbee1_max"],["NA"],[Decimal(NaN)]) #empy Max
             vbatt_xbee1 = Lib.AinParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee1, vi_xbee1, vp_xbee1,vp_xbee1_min,vp_xbee1_max, \
-                    vpos_xbee1,vpos_xbee1_min,vpos_xbee1_max, vbatt_xbee1])
+                    vpos_xbee1,vpos_xbee1_min,vpos_xbee1_max])
+            Lib.diagParams.extend([vbatt_xbee1])
         elif (xBeeNodeTypes[0] == "Pressure"):
             vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[Decimal(NaN)]) # empty set
             vi_xbee1_min = Lib.Param(["vi_xbee1_min"],["NA"],[Decimal(NaN)]) #empy Min
@@ -393,7 +395,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee1_max = Lib.Param(["vpos_xbee1_max"],["NA"],[Decimal(NaN)]) #empy Max
             vbatt_xbee1 = Lib.AinParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee1, vi_xbee1,vi_xbee1_min,vi_xbee1_max, vp_xbee1, \
-                    vpos_xbee1,vpos_xbee1_min,vpos_xbee1_max, vbatt_xbee1])
+                    vpos_xbee1,vpos_xbee1_min,vpos_xbee1_max])
+            Lib.diagParams.extend([vbatt_xbee1])
         elif (xBeeNodeTypes[0] == "Door"):
             vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[Decimal(NaN)]) # empty set
             vi_xbee1_min = Lib.Param(["vi_xbee1_min"],["NA"],[Decimal(NaN)]) #empy Min
@@ -404,7 +407,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee1 = Lib.AinParam("vpos_xbee1",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
             vbatt_xbee1 = Lib.AinParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee1, vi_xbee1,vi_xbee1_min,vi_xbee1_max, vp_xbee1,vp_xbee1_min,vp_xbee1_max, \
-                    vpos_xbee1, vbatt_xbee1])
+                    vpos_xbee1])
+            Lib.diagParams.extend([vbatt_xbee1])
         print("Xbee {} Address is {}".format(x,nodeAddress))
     if (x == 1):
         n_xbee2 = Lib.Param(["n_xbee2"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
@@ -422,7 +426,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vbatt_xbee2_min = Lib.Param(["vbatt_xbee2_min"],["NA"],[Decimal(NaN)]) #empy Min
             vbatt_xbee2_max = Lib.Param(["vbatt_xbee2_max"],["NA"],[Decimal(NaN)]) #empy Max
             Lib.params.extend([n_xbee2, vi_xbee2,vi_xbee2_min,vi_xbee2_max, vp_xbee2,vp_xbee2_min,vp_xbee2_max, \
-                    vpos_xbee2,vpos_xbee2_min,vpos_xbee2_max, vbatt_xbee2,vbatt_xbee2_min,vbatt_xbee2_max])
+                    vpos_xbee2,vpos_xbee2_min,vpos_xbee2_max])
+            Lib.diagParams.extend([vbatt_xbee2,vbatt_xbee2_min,vbatt_xbee2_max])
         elif (xBeeNodeTypes[1] == "CT"):
             vi_xbee2 = Lib.AinParam("vi_xbee2", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
@@ -433,7 +438,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee2_max = Lib.Param(["vpos_xbee2_max"],["NA"],[Decimal(NaN)]) #empy Max
             vbatt_xbee2 = Lib.AinParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee2, vi_xbee2, vp_xbee2,vp_xbee2_min,vp_xbee2_max, \
-                    vpos_xbee2,vpos_xbee2_min,vpos_xbee2_max, vbatt_xbee2])
+                    vpos_xbee2,vpos_xbee2_min,vpos_xbee2_max])
+            Lib.diagParams.extend([vbatt_xbee2])
         elif (xBeeNodeTypes[1] == "Pressure"):
             vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vi_xbee2_min = Lib.Param(["vi_xbee2_min"],["NA"],[Decimal(NaN)]) #empy Min
@@ -444,7 +450,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee2_max = Lib.Param(["vpos_xbee2_max"],["NA"],[Decimal(NaN)]) #empy Max
             vbatt_xbee2 = Lib.AinParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee2, vi_xbee2,vi_xbee2_min,vi_xbee2_max, vp_xbee2, \
-                    vpos_xbee2,vpos_xbee2_min,vpos_xbee2_max, vbatt_xbee2])
+                    vpos_xbee2,vpos_xbee2_min,vpos_xbee2_max])
+            Lib.diagParams.extend([vbatt_xbee2])
         elif (xBeeNodeTypes[1] == "Door"):
             vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vi_xbee2_min = Lib.Param(["vi_xbee2_min"],["NA"],[Decimal(NaN)]) #empy Min
@@ -455,7 +462,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee2 = Lib.AinParam("vpos_xbee2",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
             vbatt_xbee2 = Lib.AinParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee2, vi_xbee2,vi_xbee2_min,vi_xbee2_max, vp_xbee2,vp_xbee2_min,vp_xbee2_max, \
-                    vpos_xbee2, vbatt_xbee2])
+                    vpos_xbee2])
+            Lib.diagParams.extend([vbatt_xbee2])
         print("Xbee {} Address is {}".format(x,nodeAddress))
     if (x == 2):
         n_xbee3 = Lib.Param(["n_xbee3"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
@@ -473,7 +481,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vbatt_xbee3_min = Lib.Param(["vbatt_xbee3_min"],["NA"],[Decimal(NaN)]) #empy Min
             vbatt_xbee3_max = Lib.Param(["vbatt_xbee3_max"],["NA"],[Decimal(NaN)]) #empy Max
             Lib.params.extend([n_xbee3, vi_xbee3,vi_xbee3_min,vi_xbee3_max, vp_xbee3,vp_xbee3_min,vp_xbee3_max, \
-                    vpos_xbee3,vpos_xbee3_min,vpos_xbee3_max, vbatt_xbee3,vbatt_xbee3_min,vbatt_xbee3_max])
+                    vpos_xbee3,vpos_xbee3_min,vpos_xbee3_max])
+            Lib.diagParams.extend([vbatt_xbee3,vbatt_xbee3_min,vbatt_xbee3_max])
         elif (xBeeNodeTypes[2] == "CT"):
             vi_xbee3 = Lib.AinParam("vi_xbee3", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
@@ -484,7 +493,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee3_max = Lib.Param(["vpos_xbee3_max"],["NA"],[Decimal(NaN)]) #empy Max
             vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee3, vi_xbee3, vp_xbee3,vp_xbee3_min,vp_xbee3_max, \
-                    vpos_xbee3,vpos_xbee3_min,vpos_xbee3_max, vbatt_xbee3])
+                    vpos_xbee3,vpos_xbee3_min,vpos_xbee3_max])
+            Lib.diagParams.extend([vbatt_xbee3])
         elif (xBeeNodeTypes[2] == "Pressure"):
             vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vi_xbee3_min = Lib.Param(["vi_xbee3_min"],["NA"],[Decimal(NaN)]) #empy Min
@@ -495,7 +505,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee3_max = Lib.Param(["vpos_xbee3_max"],["NA"],[Decimal(NaN)]) #empy Max
             vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee3, vi_xbee3,vi_xbee3_min,vi_xbee3_max, vp_xbee3, \
-                   vpos_xbee3,vpos_xbee3_min,vpos_xbee3_max, vbatt_xbee3])
+                   vpos_xbee3,vpos_xbee3_min,vpos_xbee3_max])
+            Lib.diagParams.extend([vbatt_xbee3])
         elif (xBeeNodeTypes[2] == "Door"):
             vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vi_xbee3_min = Lib.Param(["vi_xbee3_min"],["NA"],[Decimal(NaN)]) #empy Min
@@ -506,7 +517,8 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee3 = Lib.AinParam("vpos_xbee3",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
             vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
             Lib.params.extend([n_xbee3, vi_xbee3,vi_xbee3_min,vi_xbee3_max, vp_xbee3,vp_xbee3_min,vp_xbee3_max, \
-                    vpos_xbee3, vbatt_xbee3])
+                    vpos_xbee3])
+            Lib.diagParams.extend([vbatt_xbee3])
         print("Xbee {} Address is {}".format(x,nodeAddress))
 
 Lib.Adc.debug = False
