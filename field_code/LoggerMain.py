@@ -171,6 +171,7 @@ def fetchTempsAdafruit(ADCs): #TODO remove this function once fetchTemps() is ve
     pass
 
 def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify reliable Data
+    global currentCO2value #used for handing off CO2 Value
     for mux in range(Lib.Adc.NMUX):
         for job in range(3): ## [ start, sleep, fetch ]
             for sensor in Lib.ains:
@@ -201,6 +202,8 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                             if sensor.name[0:2] == "TC":  #perhaps break the conversion out from the read cycle?
                                 sensor.appendAdcValue(Value) # conversions for Tcs are performed in AdcValue.
                                 result = sensor.getLastVal()
+                            elif sensor.name == "J25-1@U9": #CO2 input
+                                currentCO2value = Value #handoff to main loop
                             else:
                                 #print("this is not a TC."),  #DBG
                                 result = Value #TODO other conversions?
@@ -293,8 +296,7 @@ def closeOutRecord():      # DC 11.28
 def write1secRecord():      # DC 11.28 
     # wHen writing 1-second records, we simply write sensor.currentvalue 
     #  to the data record 
-    # Number of samples = 1
-    # Increment record number integer (done in LoggerLib).
+    # Number of samples should be = 1
 
     # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
     # Place data values in record string (see xlsx file for list of parameters)
@@ -308,8 +310,12 @@ def write1secRecord():      # DC 11.28
     for sensor in Lib.sensors:
         #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
         sensor.clearValues()
-    ## clear any Params that accumulate?
+    ## clear any non-sensor Params that accumulate?
     for param in Lib.params:
+        if "scans_accum" in param.headers:
+            param.setValue(0)
+        if "sec_count" in param.headers:
+            param.setValue(0)
         if "n_xbee1" in param.headers:
             param.setValue(0)
         if "n_xbee2" in param.headers:
@@ -484,6 +490,7 @@ dataFile.close()
 
 pressstarttime = None
 co2starttime   = None    ## DWC messy, used to avoid error on first scan
+currentCO2value = Decimal("NaN") ## used in handoff between function calls within PythonMain
 valveindexco2  = None
 valveco2       = 0
 co2_elapsed    = None
@@ -541,14 +548,22 @@ while True:
     ## Determine status of both burners
     ## Assign operating mode of wh and furnace
     whmode = wh.calcMode() ## also updates status (if burner is present) ## TODO
+    Lib.whburner_stat.setValue(int(wh.getStatus())) ## update params to record
+    Lib.whburner_mode.setValue(int(whmode))
     fmode = f.calcMode() ## also updates status (if burner is present) ## TODO
+    Lib.fburner_stat.setValue(int(f.getStatus())) ## update params to record
+    Lib.fburner_mode.setValue(int(fmode))
+    # DEBUG
+    #print("whmodeParam(Status,Mode) is:{},{}, fburnerParam(Status,Mode) is:{},{}".format( \
+    #        Lib.whburner_stat.reportScanData(), Lib.whburner_mode.reportScanData(), \
+    #        Lib.fburner_stat.reportScanData(),Lib.fburner_mode.reportScanData()))
     if False:          ## TEST PRINT
         print("furn temp: {:>5.1f}  fstatus:  {}  fmode: {} fprevMode: {} "\
                 .format(f.tc.getLastVal(), f.getStatus(), fmode, f.prevMode))
         ## DWC 121.14 added similar print for wh:
         print("wh temp:   {:>5.1f}  whstatus: {}  whmode: {} whprevMode: {} "\
                 .format(wh.tc.getLastVal(), wh.getStatus(), whmode, wh.prevMode))
-
+    
     # DC we need to capture previous state before entering the state-setting routine
     #mon.setprevState(mon.getstate())   # DC 11.28 is this correct?
 
@@ -570,7 +585,6 @@ while True:
     elif ((whmode == Lib.Burner.Mode5Off) or (fmode == Lib.Burner.Mode5Off)): 
         mon.state = Mon.State6Off
     ## else no change
-
     ## Cycle between states 5 and 6 when both burners are off
     if (mon.state == Mon.State6Off):
         if ((math.trunc(scantime) % 900) < 60): ## in first minute of 15 minute interval
@@ -582,6 +596,8 @@ while True:
             mon.state = Mon.State6Off
         ## else no change
     ## else no change
+    ## record the params for states 
+    Lib.monitor.setValue(int(mon.state))
     ## DWC 12.16 moved print statement to after state is set
     if False:         ## TEST PRINT
         print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
@@ -606,7 +622,7 @@ while True:
     press_elapsed = scantime - pressstarttime
     if (((press_elapsed) >= PRESSVALVECYCLE) or ((press_elapsed) < 0)):
         try:
-            #first store the fetched pressure for the previous valve setting
+            ## first store the fetched pressure for the previous valve setting
             if valvepress == 0:
                 Lib.p_zero.appendAdcValue(currentpressure)
             elif valvepress == 1:
@@ -615,18 +631,19 @@ while True:
                 Lib.p_fvent.appendAdcValue(currentpressure)
             elif valvepress == 3:
                 Lib.p_zone.appendAdcValue(currentpressure)
+            ## next, update valve index
             valveindexpress = valvelistpress.index(valvepress)
             valveindexpress += 1
             if valveindexpress == (len(valvelistpress)):
                 valveindexpress = 0
             valvepress = valvelistpress[valveindexpress]  
             pressstarttime = scantime
-            Lib.p_valve_time.setValue(int(0)) # reset time elapsed
-            Lib.p_valve_pos.setValue(int(valvepress)) #update present valve setting
+            Lib.p_valve_time.setValue(int(0)) ## reset time elapsed
+            Lib.p_valve_pos.setValue(int(valvepress)) ## update present valve setting
         except:
             print("could not execute CO2 valve indexing routine")
     else: #wait for scan cycles before changing valve setting
-        Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) #increment valve dwell counter
+        Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) ## increment valve dwell counter
         
     if (mon.getstate() in [4,6]):     ## No CO2 monitoring
         valveco2 = 0           
@@ -669,13 +686,13 @@ while True:
                 valveco2 = 4             ## TODO Verify valve numbers.
             else: 
                 valveco2 = 5        
-            co2starttime = scantime
         elif (mon.getstate() == 5):      ## Starting 1-min CO2 sampling during Off period
             if(Conf.waterHeaterIsPresent):    ## Priority to water heater ifpresent
                 valveco2 = 4    ## Verify valve numbers
             else: 
                 valveco2 = 5  #start 
-            co2starttime = scantime
+        co2starttime = scantime
+        Lib.co2_valve_pos.setValue(int(valveco2)) ## set initial value of Parameter "loc_co2"
      
     ## Valve cycling 
     ## TODO set up initialization of valve list to reflect presence of wh and/or furn
@@ -686,20 +703,34 @@ while True:
         co2_elapsed = scantime - co2starttime
         if (((co2_elapsed) >= CO2VALVECYCLE) or ((co2_elapsed) < 0)):
             try:
+                ## first store the fetched pressure for the previous valve setting
+                if valveco2 == 4:
+                    Lib.co2_whvent.appendAdcValue(currentCO2value) # record sensor value
+                elif valveco2 == 5:
+                    Lib.co2_fvent.appendAdcValue(currentCO2value) # record sensor value
+                elif valveco2 == 6:
+                    Lib.co2_zone.appendAdcValue(currentCO2value) # record sensor value
+                ## next, update valve index
                 valveindexco2 = valvelistco2.index(valveco2)
                 valveindexco2 += 1
                 if valveindexco2 == (len(valvelistco2)):
                     valveindexco2 = 0
                 valveco2 = valvelistco2[valveindexco2]  
                 co2starttime = scantime
+                Lib.co2_valve_time.setValue(int(0)) ## reset time elapsed
+                Lib.co2_valve_pos.setValue(int(valveco2)) ## update present valve setting
                 print("CO2 valve indexing. Elapsed = {}"\
                 .format (scantime-co2starttime))
             except:
                 print("could not execute press valve indexing routine")
-        
+        else: ## wait for scan cycles before changing active valve
+            Lib.co2_valve_time.setValue(int(round(Decimal(scantime-co2starttime),0))) ## increment valve dwell counter
+
     if (mon.getstate() in [4,6]):     ## No CO2 monitoring
         valveco2 = 0           
-    ## Set valves
+
+
+    ## Set co2 valves
     if (valveco2 == 4):
         Lib.co2_whvent_valve.setValue(1)
         Lib.co2_fvent_valve.setValue(0)

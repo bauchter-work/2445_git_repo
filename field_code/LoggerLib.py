@@ -554,7 +554,7 @@ class CO2(Ain):
 
     def appendAdcValue(self, value):
         value = value
-        volts = value/1000  ## TODO get this converted to engineering units
+        volts = value/1000  ## TODO get this converted to engineering units (PPM)
         self.appendValue(volts)
         pass
 
@@ -562,6 +562,8 @@ co2_whvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switch
 co2_fvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_fvent) ## valve-switched--unique CO2 sensor on same ADC
 co2_zone  = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_zone) ## valve-switched--unique CO2 sensor on same ADC
 co2_sensors = [co2_whvent, co2_fvent, co2_zone]
+
+sensors.extend(co2_sensors)
 
 niu1 = Ain("J25-2@U9", Adc.U9, Adc.MUX1) ## unused ain
 niu2 = Ain("J25-3@U9", Adc.U9, Adc.MUX2) ## unused ain
@@ -954,7 +956,7 @@ timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
-diagParams = []
+diagParams = [] #empty set for diagnostic file's parameters TODO
 
 def DEC(number):
     return Decimal(number) #"{:d}".format(number)
@@ -1066,17 +1068,19 @@ class PressureParam(SampledParam):
         return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] #TODO change range value outputs
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
-p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time--TODO: should report duration
-zeropress = PressureParam("zero", p_zero) ## TODO: these should be different sensors
+p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time
+zeropress = PressureParam("zero", p_zero) 
 whventpress = PressureParam("whvent", p_whvent)
 fventpress = PressureParam("fvent", p_fvent)
 zonepress = PressureParam("zone", p_zone)
 params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
 
-whburner = Param(["wh_status", "wh_mode"],["integer","integer"],[DEC(NaN),DEC(NaN)]) #TODO check - is this correct?
-fburner = Param(["f_status", "f_mode"],["integer","integer"],[DEC(NaN),DEC(NaN)]) #TODO Check - is this correct?
+whburner_stat = Param(["wh_status"],["integer"],[DEC(NaN)])
+whburner_mode = Param(["wh_mode"],["integer"],[DEC(NaN)]) 
+fburner_stat = Param(["f_status"],["integer"],[DEC(NaN)]) 
+fburner_mode = Param(["f_mode"],["integer"],[DEC(NaN)])
 monitor = Param(["sys_state"],["integer"],[DEC(NaN)])
-params.extend([whburner, fburner, monitor])
+params.extend([whburner_stat,whburner_mode,fburner_stat, fburner_mode, monitor])
 
 scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
 sec_whrun = Param(["sec_whrun"],["integer"],[0]) # total accumulated run time, but output zero at end of 60-sec records
@@ -1087,7 +1091,6 @@ sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages
 params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
 
 class XbeeParam(SampledParam):
-    """includes all CO2 (sampled) parameters"""
     def __init__(self, loc, sensor):
         fix = loc
         SampledParam.__init__(self, [fix+""], ["V"], loc, sensor) 
@@ -1116,18 +1119,24 @@ def record(recType):
             fields = param.reportUnits()
         elif (recType == SingleScanRec):
             fields = param.reportScanData()
-            # Increment record number integer
+            ## Increment record number integer
             if param.reportHeaders() == ['rec_num']:
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
+            ## assign scans_accum the length of t_outdoor values (should be = 1)
+            scans_accum.setValue(len(tcs[14].values))
+            sec_count.setValue(1)
         elif (recType == MultiScanRec):
             fields = param.reportStatData()
-            # Increment record number integer
+            ## Increment record number integer
             if param.reportHeaders() == ['rec_num']:
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
+            ## assign scans_accum the length of t_outdoor values (should be 2-60)
+            scans_accum.setValue(len(tcs[14].values))
+            sec_count.setValue(scans_accum.getValue())
         #print("Fields:{}".format(fields))
         commaIndex = 0
         for field in fields:
