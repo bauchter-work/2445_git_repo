@@ -514,7 +514,10 @@ class CO(Ain):
     """includes all (ADC-attached) CO sensor inputs"""
     def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS, co_calib_value=1658):
         Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
-        self.co_calib_value = co_calib_value
+        try:
+            self.co_calib_value = Conf.co_calib_value  #try to base it off Configuration File first
+        except:
+            self.co_calib_value = co_calib_value #otherwise, go with what's written in above
         pass
     
     def appendAdcValue(self, value):
@@ -554,8 +557,8 @@ class CO2(Ain):
 
     def appendAdcValue(self, value):
         value = value
-        volts = value/1000  ## TODO get this converted to engineering units (PPM)
-        self.appendValue(volts)
+        ppmCO2 = 2000 * value   ## get this converted to engineering units (PPM)
+        self.appendValue(ppmCO2)
         pass
 
 co2_whvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switched--unique CO2 sensor on same ADC
@@ -956,7 +959,7 @@ timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
-diagParams = [] #empty set for diagnostic file's parameters TODO
+diagParams = [siteid] ## set for diagnostic file's parameters TODO
 
 def DEC(number):
     return Decimal(number) #"{:d}".format(number)
@@ -1150,3 +1153,28 @@ def record(recType):
     #print("\n-End of record print-")
     return returnString
 
+def diag_record(recType):
+    returnString = ""
+    for param in diagParams:
+        fields = None
+        #print("Param(s): {}".format(param.reportHeaders()))
+        if (recType == HeaderRec):
+            fields = param.reportHeaders()
+        elif (recType == UnitsRec):
+            fields = param.reportUnits()
+        elif (recType == SingleScanRec):
+            fields = param.reportScanData()
+        elif (recType == MultiScanRec):
+            fields = param.reportStatData()
+        #print("Fields:{}".format(fields))
+        commaIndex = 0
+        for field in fields:
+            if (param == params[-1]) and (commaIndex == (len(fields)-1)):
+                #print("field:{} of fields:{}".format(field,fields), end='\n') #last item
+                returnString = returnString+str(field)+'' #rely on filewrite to add own \n
+            else:
+                #print("{}, ".format(field), end='') #end='\n'
+                returnString = returnString+str(field)+','
+            commaIndex = commaIndex + 1
+    #print("\n-End of record print-")
+    return returnString

@@ -19,6 +19,8 @@ xBeeNode2Type = "none" #type "CT", "Pressure", "Door", "none"
 xBeeNode3 = "0xffff"        ## Node 3, use "0xffff" if not deployed
 xBeeNode3Type = "none" #type "CT", "Pressure", "Door", "none"
 
+co_calib_value = 1700  # replace with device-specific calibration number. Default = 1700
+
 savePath = "/root/data/" ## location to store data on BBB
 
 maxFileSize = 750000000     ## Maximum data filesize before creating a new data file (don't exceed 1GB)

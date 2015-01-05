@@ -28,7 +28,6 @@ import time, math, sys, os
 from datetime import datetime
 from decimal import *
 import LoggerLib as Lib
-from Adafruit_ADS1x15_mod import ADS1x15 
 import Adafruit_BBIO.UART as UART
 from xbee import zigbee
 import serial
@@ -141,34 +140,6 @@ def fetchXbee(data):
         print ("unable to print or parse xbee data")
     pass
 
-
-def fetchTempsAdafruit(ADCs): #TODO remove this function once fetchTemps() is verified sound
-    for mux in range(4):
-        for job in range(2): ##[Start, fetch]
-            for ADC in ADCs:
-              if (job ==0): #start
-                Value=ADC.readADCSingleEnded(mux,1024,250)
-              else:
-                Value=ADC.readADCSingleEnded(mux,1024,250)
-                Volts = Value/1000
-                #print("adafruitLib ADC 0x{:02x} measures:{} , AIN:{}".format(ADC.address,Volts,mux))
-                for sensor in Lib.sensors:
-                    if isinstance(sensor,Lib.Tc):
-                        if (sensor.adc.i2c == ADC.busnum) \
-                         and (sensor.adc.addrs[sensor.adcIndex] == ADC.address) \
-                         and (sensor.mux == mux):
-                            if (sensor.name == "TC15@U15") or (sensor.name == "TC16@U15"):
-                                result = (360*(Volts-0.5))+32 #for deg. F, 0.5V bias
-                                #print sensor.name, "reads ", result, "F. 0.5V BIASED"
-                                #print "I2C Address: ",sensor.adc.addrs[sensor.adcIndex],"AIN:",sensor.mux
-                            else:
-                                result = (360*Volts)+32 #for deg. F, 0V bias
-                                #print sensor.name, "reads ", result, "F"
-                                #print("I2C Address: 0x{:02x}, AIN: {},I2Cindex: {}" \
-                                #  .format(sensor.adc.addrs[sensor.adcIndex],sensor.mux, sensor.adc.i2cIndex))
-                            #result = random.random() * 200.0 ## DBG
-                            sensor.appendAdcValue(result)
-    pass
 
 def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify reliable Data
     global currentCO2value #used for handing off CO2 Value
@@ -399,7 +370,6 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee1 = Lib.XbeeParam("vpos_xbee1",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
             vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
         Lib.params.extend([n_xbee1, vi_xbee1, vp_xbee1, vpos_xbee1])
-        Lib.diagParams.extend([vbatt_xbee1])
         print("Xbee {} Address is {}".format(x,nodeAddress))
     if (x == 1):
         n_xbee2 = Lib.Param(["n_xbee2"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
@@ -424,7 +394,6 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee2 = Lib.XbeeParam("vpos_xbee2",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
             vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
         Lib.params.extend([n_xbee2, vi_xbee2, vp_xbee2, vpos_xbee2])
-        Lib.diagParams.extend([vbatt_xbee2])
         print("Xbee {} Address is {}".format(x,nodeAddress))
     if (x == 2):
         n_xbee3 = Lib.Param(["n_xbee3"],["integer"],[0]) # number of values accumulated from xbee1 since last record (for averaging values)
@@ -449,17 +418,7 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee3 = Lib.AinParam("vpos_xbee3",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
             vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
         Lib.params.extend([n_xbee3, vi_xbee3, vp_xbee3, vpos_xbee3])
-        Lib.diagParams.extend([vbatt_xbee3])
         print("Xbee {} Address is {}".format(x,nodeAddress))
-
-Lib.Adc.debug = False
-AdaAdcU11 = ADS1x15(ic=ADS1115,address=0x48,busnum=2)
-AdaAdcU13 = ADS1x15(ic=ADS1115,address=0x49,busnum=2) 
-AdaAdcU14 = ADS1x15(ic=ADS1115,address=0x4a,busnum=2) 
-AdaAdcU15 = ADS1x15(ic=ADS1115,address=0x4b,busnum=2) 
-AdaAdcU8 = ADS1x15(ic=ADS1115,address=0x48,busnum=1) #CO Amp on Ain2
-AdaAdcU9 = ADS1x15(ic=ADS1115,address=0x49,busnum=1) #CO2 on Ain0
-AdaAdcU10 = ADS1x15(ic=ADS1115,address=0x4a,busnum=1)
 
 wh = Lib.waterHtr
 f = Lib.furnace
@@ -477,8 +436,17 @@ dataFile.write(Lib.record(HEADER_REC)+"\n")
 dataFile.close()
 #TODO Record Units?
 
-#Record diagnostics information
-
+## Record diagnostics information
+diagnosticsFile= open(diagnosticsFilename,'ab')
+BBB_id = Lib.Param(["BBB_ID"],[""],[uniqueID]) #Build any additional items TODO
+BBB_xBeeNodes = Lib.Param(["xBeeNodes"],["Hex Addresses"],[str(xBeeNodes).replace(","," ")])
+BBB_xBeeNodeTypes = Lib.Param(["xBeeNodeTypes"],["Sensor Type"],[str(xBeeNodeTypes).replace(","," ")])
+BBB_CO_Calibration = Lib.Param(["CO_Calib_Factor"],["int"],[Conf.co_calib_value])
+Lib.diagParams.extend([BBB_id,BBB_CO_Calibration,BBB_xBeeNodes,BBB_xBeeNodeTypes])
+Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee2,vbatt_xbee3])
+diagnosticsFile.write(Lib.diag_record(HEADER_REC)+"\n")
+diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
+diagnosticsFile.close()
 
 ## determine the current state
 ## DWC 12.14 I don't think we want to fetch here, rather just start scans, and 
@@ -542,8 +510,9 @@ while True:
         #if isinstance(sensor, Lib.Xbee):
         #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getLastVal())
                 
-    #for burner in Lib.burners: ## DEBUG
-    #    burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
+    if False: #DEBUG for burner sequencing
+        for burner in Lib.burners: ## DEBUG
+            burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
 
     ## Process data
     ## Determine status of both burners
@@ -572,8 +541,16 @@ while True:
     mon.setprevState()     ## DWC 12.16
     if ((whmode == Lib.Burner.Mode2On) or (fmode == Lib.Burner.Mode2On)): ## at least one burner is on
         mon.state = Mon.State2On
+        if whmode == Lib.Burner.Mode2On:
+            Lib.sec_whrun.setValue(Lib.sec_whrun.reportScanData()[0]+1)
+        if fmode == Lib.Burner.Mode2On:
+            Lib.sec_frun.setValue(Lib.sec_frun.reportScanData()[0]+1)
     elif ((whmode == Lib.Burner.Mode1JustStarted) or (fmode == Lib.Burner.Mode1JustStarted)): ## first burner just started
         mon.state = Mon.State1Start
+        if whmode == Lib.Burner.Mode1JustStarted:
+            Lib.sec_whrun.setValue(Lib.sec_whrun.reportScanData()[0]+1)
+        if fmode == Lib.Burner.Mode1JustStarted:
+            Lib.sec_frun.setValue(Lib.sec_frun.reportScanData()[0]+1)
     elif ((whmode == Lib.Burner.Mode3JustStopped) or (fmode == Lib.Burner.Mode3JustStopped)): ## last burner just stopped
         mon.state = Mon.State3Stop
     elif ((whmode == Lib.Burner.Mode4Cooling) or (fmode == Lib.Burner.Mode4Cooling)): ## hold in state 4 even if burners have moved to state 5
@@ -583,8 +560,19 @@ while True:
             if ((((scantime - lastStopTime) >= 120.0) and (datetime.utcfromtimestamp(scantime).second == 0)) or ((scantime - lastStopTime) >= 180.0)): 
                 print("mon.state should be Mon.State6Off")
         mon.state = Mon.State4CoolDown
+        if whmode == Lib.Burner.Mode4Cooling:  ## count up the active time for cooling
+            Lib.sec_whcooldown.setValue(Lib.sec_whcooldown.reportScanData()[0]+1)
+        if fmode == Lib.Burner.Mode4Cooling:
+            Lib.sec_fcooldown.setValue(Lib.sec_fcooldown.reportScanData()[0]+1)
     elif ((whmode == Lib.Burner.Mode5Off) or (fmode == Lib.Burner.Mode5Off)): 
         mon.state = Mon.State6Off
+        if whmode == Lib.Burner.Mode5Off:  ## Clear accumulated values for all wh counts
+            Lib.sec_whrun.setValue(0)
+            Lib.sec_whcooldown.setValue(0)
+        if fmode == Lib.Burner.Mode5Off:
+            Lib.sec_frun.setValue(0)
+            Lib.sec_fcooldown.setValue(0)
+
     ## else no change
     ## Cycle between states 5 and 6 when both burners are off
     if (mon.state == Mon.State6Off):
@@ -603,6 +591,8 @@ while True:
     if False:         ## TEST PRINT
         print("time {:>12.1f} mon state: {}  prevState: {}  sw1: {}"\
             .format(scantime, mon.state, mon.prevState, Lib.sw1.getValue()))
+    
+
 
     if False:
         for sensor in Lib.sensors:
