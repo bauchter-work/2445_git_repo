@@ -529,7 +529,7 @@ fan1 = Ain("JP1-B@U8", Adc.U8, Adc.MUX1) ## fan current 1 sensor
 fan2 = Ain("JP1-C@U8", Adc.U8, Adc.MUX2) ## fan current 2 sensor
 co   = CO("JP1-D@U8", Adc.U8, Adc.MUX3) ## CO sensor
 ains.extend([door1, fan1, fan2, co]) ## remaining ains NOT included: [co2..., niu1, niu2, batt, niu3, niu4, niu5, niu6])
-sensors.extend(ains) 
+ 
 
 ## note: remaining sensors are more complicated...what with valves and all...and are handled separately
 
@@ -562,8 +562,7 @@ co2_whvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switch
 co2_fvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_fvent) ## valve-switched--unique CO2 sensor on same ADC
 co2_zone  = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_zone) ## valve-switched--unique CO2 sensor on same ADC
 co2_sensors = [co2_whvent, co2_fvent, co2_zone]
-
-sensors.extend(co2_sensors)
+ains.extend(co2_sensors)
 
 niu1 = Ain("J25-2@U9", Adc.U9, Adc.MUX1) ## unused ain
 niu2 = Ain("J25-3@U9", Adc.U9, Adc.MUX2) ## unused ain
@@ -574,6 +573,7 @@ niu4 = Ain("J25-6@U10", Adc.U10, Adc.MUX1) ## spare ain
 niu5 = Ain("J25-7@U10", Adc.U10, Adc.MUX2) ## spare ain
 niu6 = Ain("J25-8@U10", Adc.U10, Adc.MUX3) ## spare ain
 
+sensors.extend(ains)
 ## DWC 12.14 need ain.extend and sensors.extend for these: [co2..., niu1, niu2, batt, niu3, niu4, niu5, niu6]
 
 class Dlvr(I2c, Sensor):

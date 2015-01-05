@@ -32,7 +32,7 @@ from Adafruit_ADS1x15_mod import ADS1x15
 import Adafruit_BBIO.UART as UART
 from xbee import zigbee
 import serial
-
+import random
 
 ##########################################################################################
 ## Constants 
@@ -204,6 +204,7 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                                 result = sensor.getLastVal()
                             elif sensor.name == "J25-1@U9": #CO2 input
                                 currentCO2value = Value #handoff to main loop
+                                #print("CurrentCO2value set to {}".format(currentCO2value))
                             else:
                                 #print("this is not a TC."),  #DBG
                                 result = Value #TODO other conversions?
@@ -541,7 +542,7 @@ while True:
         #if isinstance(sensor, Lib.Xbee):
         #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getLastVal())
                 
-    #for burner in Lib.burners:
+    #for burner in Lib.burners: ## DEBUG
     #    burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
 
     ## Process data
@@ -675,7 +676,7 @@ while True:
     
     
     ## CO2 control routine
-
+    
     ## For use below: waterHeaterIsPresent furnaceIsPresent    
 
     ## CO2 valve control 
@@ -705,10 +706,13 @@ while True:
             try:
                 ## first store the fetched pressure for the previous valve setting
                 if valveco2 == 4:
+                    #print("\nStoring {} into co2_whvent".format(currentCO2value))
                     Lib.co2_whvent.appendAdcValue(currentCO2value) # record sensor value
                 elif valveco2 == 5:
+                    #print("\nStoring {} into co2_fvent".format(currentCO2value))
                     Lib.co2_fvent.appendAdcValue(currentCO2value) # record sensor value
                 elif valveco2 == 6:
+                    #print("\nStoring {} into co2_zone".format(currentCO2value))
                     Lib.co2_zone.appendAdcValue(currentCO2value) # record sensor value
                 ## next, update valve index
                 valveindexco2 = valvelistco2.index(valveco2)
