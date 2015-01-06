@@ -123,7 +123,7 @@ def fetchXbee(data):
                             for y in x:  #There should only be 2 of interest in this list
                                 if matchAddress and str(y) == str(sensor.adc):  #adc-1 or adc-2
                                     #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc 
-                                    sensor.appendAdcValue(x[y]) # convert and record into volts
+                                    sensor.appendAdcValue(x[y]) # convert and record into volts for both ADC-1 and ADC-2
                                     if y == "adc-1": # increment correct n_xbee only once
                                         for param in Lib.params:
                                             fields = param.reportScanData()
@@ -136,6 +136,19 @@ def fetchXbee(data):
                                             elif (param.reportHeaders() == ['n_xbee3']) and sensor.name == "xbee-2":
                                                 #print("n_xbee3 and xbee-2 Match")
                                                 param.setValue(fields[0]+1)
+                                    if y == "adc-2": # store VBATT into diagnostics Param
+                                        for param in Lib.diagParams:
+                                            if (param.reportHeaders() == ['vbatt_xbee1']) and sensor.name == "xbee-0":
+                                                #print("vbatt_xbee1 and xbee-0 Match, vbatt1 storing:{}".format(sensor.getLastVal()))
+                                                param.setValue(sensor.getLastVal())
+                                                #print("Value of VBATT1 now:{}".format(param.values))  ## DEBUG
+                                            elif (param.reportHeaders() == ['vbatt_xbee2']) and sensor.name == "xbee-1":
+                                                #print("vbatt_xbee2 and xbee-1 Match, vbatt2 storing:{}".format(sensor.getLastVal()))
+                                                param.setValue(sensor.getLastVal())
+                                            elif (param.reportHeaders() == ['vbatt_xbee3']) and sensor.name == "xbee-2":
+                                                #print("vbatt_xbee3 and xbee-2 Match, vbatt3 storing:{}".format(sensor.getLastVal()))
+                                                param.setValue(sensor.getLastVal())
+
     except:
         print ("unable to print or parse xbee data")
     pass
@@ -281,7 +294,13 @@ def write1secRecord():      # DC 11.28
     #print("Lib.sensors:{}".format(Lib.sensors))
     for sensor in Lib.sensors:
         #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
-        sensor.clearValues()
+        if isinstance(sensor, Lib.Xbee): 
+           if sensor.adc != "adc-2":  #single out VBAT as do-not-delete
+               sensor.clearValues()
+           #else:
+               #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
+        else:
+            sensor.clearValues()
     ## clear any non-sensor Params that accumulate?
     for param in Lib.params:
         if "scans_accum" in param.headers:
@@ -294,7 +313,6 @@ def write1secRecord():      # DC 11.28
             param.setValue(0)
         if "n_xbee3" in param.headers:
             param.setValue(0)
-    ## TODO clear Lib.diagParams ??
     pass
 
 
@@ -310,7 +328,6 @@ class Mon(object):
 
     def __init__(self):
         self.__prevState = None
-        #self.__state = None #= Mon.State6Off ## TODO?  commented 12.16
         self.__state = Mon.State6Off ## DWC 12.16 try this
 
     def getprevState(self): return self.__prevState
@@ -447,6 +464,7 @@ Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee2,vbatt_xbee3])
 diagnosticsFile.write(Lib.diag_record(HEADER_REC)+"\n")
 diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
 diagnosticsFile.close()
+lastDiagTime = time.time()  ## First instantiation of Diagnostic output 
 
 ## determine the current state
 ## DWC 12.14 I don't think we want to fetch here, rather just start scans, and 
@@ -754,6 +772,23 @@ while True:
     ## TODO Record control
     # DC 11.28 Start new code for Record Control
     # Is "scantime" the current time to 1 sec resolution?
+    
+    ## Diagnostic record control (Do this before values get cleared).  Recorded daily
+    if ((((scantime - lastDiagTime) >= 86400.0) and (datetime.utcfromtimestamp(scantime).hour == 0) and (datetime.utcfromtimestamp(scantime).minute == 0)) or ((scantime - lastDiagTime) >= 129600)): #Daily Diagnostic Record
+    #if ((((scantime - lastDiagTime) >= 60.0) and (datetime.utcfromtimestamp(scantime).second == 0)) or ((scantime - lastDiagTime) >= 180.0)): ## DEBUG Interval
+        #print("Writing Diagnostics File")
+        diagnosticsFile= open(diagnosticsFilename,'ab')
+        diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
+        diagnosticsFile.close()
+        lastDiagTime = scantime
+        #TODO: clear/zero any diagParams or sensor data?
+        for sensor in Lib.sensors:
+            #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
+            if isinstance(sensor, Lib.Xbee): 
+               if sensor.adc == "adc-2":  #single out VBAT as do-not-delete
+                   sensor.clearValues()
+                   #print("cleared VBATT values")
+
     # Create "lastRecordTime" in seconds
     
     # Define 2 lists for state tests:
@@ -782,7 +817,6 @@ while True:
     # DC 11.28 End of new code
 
 
-    ## Diagnostic record control
     ## Cleanup
 
     #Service watchdog
@@ -792,7 +826,7 @@ while True:
     except:
         print("unable to write to watchdog")
     
-    # Check memory periodically? #TODO
+    # Check memory periodically? Create new File periodically? #TODO
     #freeDiskSpace = get_free_space_bytes(Conf.savePath)
     #if freeDiskSpace < 1000000:     
     #    print "Disk is full. Exiting"

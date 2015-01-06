@@ -504,7 +504,7 @@ tcs = [
 
         Tc("TC13@U15", Adc.U15, Adc.MUX0),
         Tc("TC14@U15", Adc.U15, Adc.MUX1),
-        Tc("TC15@U15", Adc.U15, Adc.MUX2), ## TODO
+        Tc("TC15@U15", Adc.U15, Adc.MUX2), ## outdoor temp sensor
         Tc("TC16@U15", Adc.U15, Adc.MUX3), ## spare tc
     ]
 
@@ -522,7 +522,7 @@ class CO(Ain):
     
     def appendAdcValue(self, value):
         value = value
-        volts = value/1000  ## TODO get this converted to engineering units, and test 
+        volts = value/1000  ## get this converted to engineering units, and test 
         result = ((volts * 0.5) * 2.326e6) / self.co_calib_value
         self.appendValue(result)
         pass
@@ -557,7 +557,8 @@ class CO2(Ain):
 
     def appendAdcValue(self, value):
         value = value
-        ppmCO2 = 2000 * value   ## get this converted to engineering units (PPM)
+        volts = value/1000
+        ppmCO2 = 2000 * volts   ## get this converted to engineering units (PPM)
         self.appendValue(ppmCO2)
         pass
 
@@ -959,7 +960,7 @@ timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
-diagParams = [siteid] ## set for diagnostic file's parameters TODO
+diagParams = [timest,siteid] ## set for diagnostic file's parameters TODO
 
 def DEC(number):
     return Decimal(number) #"{:d}".format(number)
