@@ -397,6 +397,16 @@ class Sensor(object):
         self.values = list()
         pass
 
+    def clearValuesExceptLast(self):
+        if len(self.values) <=0:
+            self.values = list()
+        else:
+            lastPop = self.values.pop()
+            self.values = list() # make empty set
+            self.values.append(lastPop)
+            #print("Sensor {} now has values {}".format(self.name, self.values)) ## Debug
+        pass
+
     def appendValue(self, value):
         self.values.append(value)
         pass
@@ -411,15 +421,44 @@ class Sensor(object):
 
     def getValCnt(self):
         return len(self.values)
+        pass
 
-    def getAvgVal(self):
-        return NaN if len(self.values) <= 0 else math.fsum(self.values)/len(self.values)
+    def getValCntExceptLast(self):
+        return len(self.values)-1
+        pass
 
-    def getMinVal(self):
-        return NaN if len(self.values) <= 0 else min(self.values)
+    def getAvgVal(self):  ## EXCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN
+        elif len(self.values) == 1:
+            return math.fsum(self.values)/len(self.values)
+        else:
+            clippedValues = self.values
+            clippedValues.pop() #drop the last item
+            return math.fsum(clippedValues)/len(clippedValues)
+        pass
 
-    def getMaxVal(self):
-        return NaN if len(self.values) <= 0 else max(self.values)
+    def getMinVal(self):  ## EXCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN 
+        elif len(self.values) == 1:
+            return min(self.values)
+        else: 
+            clippedValues = self.values
+            clippedValues.pop() #drop the last item
+            return min(clippedValues)
+        pass
+
+    def getMaxVal(self):  ## EXCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN 
+        elif len(self.values) == 1:
+            return max(self.values)
+        else:
+            clippedValues = self.values
+            clippedValues.pop() #drop the last item
+            return max(clippedValues)
+        pass
 
 sensors = []
 
@@ -616,7 +655,8 @@ class Dlvr(I2c, Sensor):
             #print "Pressure output is (in hex): ",format(Pressure,'04x')
             #print "Pressure output is (in dec): ",Pressure
             #Calculate Pressure:
-            Pressure_inH20 = 1.25*((float(Pressure)-8192)/(2**14))*4
+            Pressure_inH20 = 1.25*((float(Pressure)-8192)/(2**14))*4 # This is for the +/- 1 inH2O. We have a +/- 2 inH20 Sensor
+            Pressure_inH20 = Pressure_inH20 / 2.0 # scale for new sensor.
             #print "Pressure, converted is: ",format(Pressure_inH20,'0.6f'),"inH20"
             #Extract Temp Value:
             #Temp = (Response[2]<<3)+(Response[3]>>5)
@@ -1128,9 +1168,6 @@ def record(recType):
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
-            ## assign scans_accum the length of t_outdoor values (should be = 1)
-            scans_accum.setValue(len(tcs[14].values))
-            sec_count.setValue(1)
         elif (recType == MultiScanRec):
             fields = param.reportStatData()
             ## Increment record number integer
@@ -1138,9 +1175,6 @@ def record(recType):
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
-            ## assign scans_accum the length of t_outdoor values (should be 2-60)
-            scans_accum.setValue(len(tcs[14].values))
-            sec_count.setValue(scans_accum.getValue())
         #print("Fields:{}".format(fields))
         commaIndex = 0
         for field in fields:

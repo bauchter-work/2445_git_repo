@@ -88,7 +88,6 @@ for control in Lib.controls:
 UART.setup("UART4")
 ser = serial.Serial(port="/dev/ttyO4",baudrate=9600, timeout=1) #this is a letter "Oh"-4
 
-ADS1115=0x01 # Defined for Adafruit ADC Library 
 
 ###########################################################################################
 ## local functions
@@ -195,7 +194,7 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                                 #print("{} \tResult: {}mV"\
                                 #    .format(sensor.name,result))
                                 sensor.appendAdcValue(result)   ## TODO caution - should append only if accumulating longer record
-                            print("{:6.2f} " .format(result), end='')    ## DWC 12.16 put output on one line for readability
+                            print("{:4.0f} " .format(result), end='')    ## DWC 12.16 put output on one line for readability
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
                                     .format(sensor.name, adc.addr, mux, err))
@@ -251,38 +250,68 @@ def fetchPressure():
 
 # DC 11.28 New functions for building and writing records
 
-def accumulateValues():       # DC 11.28 
-    for sensor in Lib.sensors:
-        sensor.value.sum(sensor.currentvalue)  # Add current val to running sum
-        sensor.value.min(sensor.currentvalue)  # Compare current val to running min
-        sensor.value.max(sensor.currentvalue)  # Compare curr ent val to running max
-        sensor.value.count(sensor.currentvalue) # Track number of values for avg calc 
-        # OR, accumulate values over the ~60 sec period, 
-        #  and do the arithmetic at end of period:
-        sensor.appendAdcValue(sensor.currentvalue) 
+#def accumulateValues():       # DC 11.28 
+#    for sensor in Lib.sensors:
+#        sensor.value.sum(sensor.currentvalue)  # Add current val to running sum
+#        sensor.value.min(sensor.currentvalue)  # Compare current val to running min
+#        sensor.value.max(sensor.currentvalue)  # Compare curr ent val to running max
+#        sensor.value.count(sensor.currentvalue) # Track number of values for avg calc 
+#        # OR, accumulate values over the ~60 sec period, 
+#        #  and do the arithmetic at end of period:
+#        #sensor.appendAdcValue(sensor.currentvalue) 
+#    pass
 
 def closeOutRecord():      # DC 11.28 
-    for sensor in Lib.sensors:
-        # sensor.avg() = sensor.value.sum / sensor.value.count
-        # Min & max values are up to date per accumulateValues() above
-        sensor.avg()
     # Number of samples = sensorX.count where sensorX is e.g. TC1
-    # Increment record number integer
+    number_of_samples = Lib.tcs[14].getValCntExceptLast() # this should be outdoor temp
+    # Increment record number integer (This happens with Lib.record call.
+    #print("TC14's Values are:{}".format(Lib.tcs[14].values)) ## DEBUG
+    Lib.scans_accum.setValue(number_of_samples) #Set accumulator count
+    #print("scans_accum is now: {}".format(Lib.scans_accum.values))  ## DEBUG
+    Lib.sec_count.setValue((math.trunc(scantime - lastRecordTime))) 
+    #print("sec_count is now: {}".format(Lib.sec_count.values)) ## Debug
     # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
     # Place data values in record string (see xlsx file for list of parameters)
-    # Build string for output to file, using sensor.avg, sensor.min, 
-    #  sensor.max values 
+    # Build string for output to file, using sensor.avg, sensor.min, sensor.max values 
     # Write string to file - probably want a file write function in library?
     # Must clear all accumulated values when a record is closed out: 
+    dataFile = open(dataFilename,'ab')
+    dataFile.write(Lib.record(MULTI_SCAN_REC)+'\n')
+    dataFile.close()
+    ## Clear accumulator objects (may not be necessary)
+    #print("Lib.sensors:{}".format(Lib.sensors))
     for sensor in Lib.sensors:
-        sensor.value.clear()  
+        #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
+        if isinstance(sensor, Lib.Xbee): 
+           if sensor.adc != "adc-2":  #single out VBAT as do-not-delete
+               sensor.clearValues()
+           #else:
+               #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
+        else:
+            sensor.clearValuesExceptLast()
+        #print("Sensor Name: {}, Sensor Value(s): {}".format(sensor.name,sensor.values))
+    ## clear any non-sensor Params that accumulate
+    for param in Lib.params:
+        if "scans_accum" in param.headers:
+            param.setValue(0)
+        if "sec_count" in param.headers:
+            param.setValue(0)
+        if "n_xbee1" in param.headers:
+            param.setValue(0)
+        if "n_xbee2" in param.headers:
+            param.setValue(0)
+        if "n_xbee3" in param.headers:
+            param.setValue(0)
     pass
     
 def write1secRecord():      # DC 11.28 
     # wHen writing 1-second records, we simply write sensor.currentvalue 
     #  to the data record 
     # Number of samples should be = 1
-
+    ## assign scans_accum the length of t_outdoor values (should be = 1)
+    Lib.scans_accum.setValue(Lib.tcs[14].getValCnt()) #Set accumulator count
+    #print("scans_accum is now: {}".format(Lib.scans_accum.values))  ## DEBUG
+    Lib.sec_count.setValue(1) #TODO Set this as a one or as a calculation?
     # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
     # Place data values in record string (see xlsx file for list of parameters)
     # Min and max values will simply be set to the single parameter value
@@ -301,7 +330,7 @@ def write1secRecord():      # DC 11.28
                #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
         else:
             sensor.clearValues()
-    ## clear any non-sensor Params that accumulate?
+    ## clear any non-sensor Params that accumulate
     for param in Lib.params:
         if "scans_accum" in param.headers:
             param.setValue(0)
@@ -339,7 +368,6 @@ class Mon(object):
     def getstate(self): return self.__state
     def setstate(self, value): 
         self.__state = value
-        pass
     def delstate(self): del self.__state
     state = property(getstate, setstate, delstate, "'state' property")
 
@@ -451,7 +479,7 @@ diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmti
 dataFile = open(dataFilename,'ab')
 dataFile.write(Lib.record(HEADER_REC)+"\n")
 dataFile.close()
-#TODO Record Units?
+#TODO Record Units Somewhere.  Where?
 
 ## Record diagnostics information
 diagnosticsFile= open(diagnosticsFilename,'ab')
@@ -464,13 +492,12 @@ Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee2,vbatt_xbee3])
 diagnosticsFile.write(Lib.diag_record(HEADER_REC)+"\n")
 diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
 diagnosticsFile.close()
-lastDiagTime = time.time()  ## First instantiation of Diagnostic output 
+lastDiagTime = time.time() - ((time.time() % 86400.0)+1)  ## First instantiation of Diagnostic output and funny math to get next end of day recorded.
 
 ## determine the current state
 ## DWC 12.14 I don't think we want to fetch here, rather just start scans, and 
 ##  status/mode/state should sort themselves out in time.  Commented out.
 #fetchAdcInputs()
-#fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15]) #grab all ADC inputs from TC ADCs 
 
 #################################################################################
 ## Initialization of values
@@ -483,6 +510,7 @@ valveco2       = 0
 co2_elapsed    = None
 press_elapsed  = None
 cnt = 0
+lastRecordTime = time.time()
 
 ## main loop
 Lib.Timer.start()
@@ -504,27 +532,27 @@ while True:
     ## DWC 12.14 trial of fetch pressure() in line
     currentpressure = fetchPressure()
     if True:        ## TEST PRINT
-        print("{:>9.5f}".format(currentpressure), end='') 
+        print("{:>6.2f}".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
     
     #This following for loop for DBG  
-    for mux in range(Lib.Adc.NMUX):
-        for sensor in Lib.sensors:
+    #for mux in range(Lib.Adc.NMUX):
+    #    for sensor in Lib.sensors:
          ## DWC 12.14 code hangs up here (Tc object has no attribute 'getLastVal')
         ##  so commented out
-            """
+    """
             if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
                 if (sensor.getLastVal()-sensor.getPrevVal())>4:
                     print "Temp difference for {} is {}F".format(sensor.name,(sensor.getLastVal()-\
                       sensor.getPrevVal()))
-            """
+    """
     #Read Pressure sensor check
     ## DWC 12.14 comment out, put in line above
-            """
+    """
             if isinstance(sensor, Lib.Dlvr):
                 sensor.setValves()
                 sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
             #   print "Pressure is: {}".format(sensor.getLastVal()) 
-            """
+    """
         #if isinstance(sensor, Lib.Xbee):
         #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getLastVal())
                 
@@ -788,31 +816,38 @@ while True:
                if sensor.adc == "adc-2":  #single out VBAT as do-not-delete
                    sensor.clearValues()
                    #print("cleared VBATT values")
-
-    # Create "lastRecordTime" in seconds
     
+
     # Define 2 lists for state tests:
     prev_state_60sec   = [5,6]      # Monitoring states with 60-sec record interval
     current_state_1sec = [1,2,3,4]  # Monitoring states with 1-sec record interval
     
     ## Check triggers for closing out a 60-sec record  ##TODO
-    #if ((mon.prevstate in prev_state_60sec) and ((math.trunc(scantime) % 60) == 0)): 
-    #    closeOutRecord()    ## close out accumulated record
+    if ((mon.getprevState() in prev_state_60sec) and ((math.trunc(scantime) % 60) == 0)): 
+        #print("Closing out Record")  ## DEBUG
+        closeOutRecord()    ## close out accumulated record
+        lastRecordTime = scantime
     ## Check for any record period reaching nominally 120 sec, regardless of state    
-    #elif ((scantime - lastRecordTime) >= 120):
-    #    closeOutRecord()     
+    elif ((scantime - lastRecordTime) >= 120):
+        #print("Closing out Record")  ## DEBUG
+        closeOutRecord()     
+        lastRecordTime = scantime
     ## Finally, check for a state change into 1-sec data collection    
-    #elif ((mon.prevstate in prev_state_60sec) and (mon.state in current_state_1sec)):
-    #    closeOutRecord()     
-
+    elif ((mon.getprevState() in prev_state_60sec) and (mon.getstate() in current_state_1sec)):
+        #print("Closing out Record")  ## DEBUG
+        closeOutRecord()     
+        lastRecordTime = scantime
         
     # Check current state; either write 1-sec record or accumulate values
     # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
     #  a single scan.  :TODO
-    #if (mon.state in current_state_1sec):
-    write1secRecord()
+    if (mon.getstate() in current_state_1sec):
+        #print("Writing 1sec Record")  ## DEBUG
+        write1secRecord()
+        lastRecordTime = scantime
     #else:
-    #    accumulateValues()    # Accumulate values only when not currently in 1-sec
+    #    accumulateValues()    # Accumulate values only when not currently in 1-sec ## This should happen until they are closed out.
+    #    
     
     # DC 11.28 End of new code
 
@@ -833,7 +868,7 @@ while True:
     #    sys.exit()
 
     executiontime = time.time()-scantime
-    print (" scan time: {:>5.3f} sec".format(round(Decimal(executiontime),3)), end='')
+    print (" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
     Lib.Timer.sleep()
     pass
     print()
