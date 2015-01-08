@@ -127,13 +127,16 @@ def fetchXbee(data):
                                         for param in Lib.params:
                                             fields = param.reportScanData()
                                             if (param.reportHeaders() == ['n_xbee1']) and sensor.name == "xbee-0":
-                                                #print("n_xbee1 and xbee-0 Match")
+                                                #print("n_xbee1 and xbee-0 Match")  ## DEBUG
+                                                print(" XB1:{:>4.2f} ".format(sensor.getLastVal()),end='')
                                                 param.setValue(fields[0]+1)
                                             elif (param.reportHeaders() == ['n_xbee2']) and sensor.name == "xbee-1":
                                                 #print("n_xbee2 and xbee-1 Match")
+                                                print(" XB2:{:>4.2f} ".format(sensor.getLastVal()),end='')
                                                 param.setValue(fields[0]+1)
                                             elif (param.reportHeaders() == ['n_xbee3']) and sensor.name == "xbee-2":
                                                 #print("n_xbee3 and xbee-2 Match")
+                                                print(" XB3:{:>4.2f} ".format(sensor.getLastVal()),end='')
                                                 param.setValue(fields[0]+1)
                                     if y == "adc-2": # store VBATT into diagnostics Param
                                         for param in Lib.diagParams:

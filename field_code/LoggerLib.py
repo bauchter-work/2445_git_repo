@@ -413,52 +413,51 @@ class Sensor(object):
 
     def getLastVal(self):
         return NaN if len(self.values) <= 0 else self.values[-1]
-        pass
 
     def getPrevVal(self):
         return NaN if len(self.values) <= 1 else self.values[-2]
-        pass
 
     def getValCnt(self):
         return len(self.values)
-        pass
 
     def getValCntExceptLast(self):
         return len(self.values)-1
-        pass
 
-    def getAvgVal(self):  ## EXCLUDES LAST VALUE CAPTURED
+    def getAvgVal(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
         if len(self.values) <= 0:
             return NaN
         elif len(self.values) == 1:
             return math.fsum(self.values)/len(self.values)
         else:
-            clippedValues = self.values
+            clippedValues = list()
+            for item in self.values:
+                clippedValues.append(item)
             clippedValues.pop() #drop the last item
             return math.fsum(clippedValues)/len(clippedValues)
-        pass
 
-    def getMinVal(self):  ## EXCLUDES LAST VALUE CAPTURED
+    def getMinVal(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
         if len(self.values) <= 0:
             return NaN 
         elif len(self.values) == 1:
             return min(self.values)
         else: 
-            clippedValues = self.values
+            clippedValues = list()
+            for item in self.values:
+                clippedValues.append(item)
             clippedValues.pop() #drop the last item
             return min(clippedValues)
-        pass
 
-    def getMaxVal(self):  ## EXCLUDES LAST VALUE CAPTURED
+    def getMaxVal(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
         if len(self.values) <= 0:
             return NaN 
         elif len(self.values) == 1:
             return max(self.values)
         else:
-            clippedValues = self.values
+            clippedValues = list()
+            for item in self.values:
+                clippedValues.append(item)
             clippedValues.pop() #drop the last item
             return max(clippedValues)
-        pass
 
 sensors = []
 
@@ -1109,6 +1108,9 @@ class PressureParam(SampledParam):
         return [self.val(), self.val(), self.val(), self.val(), self.val(), self.val()] #TODO change range value outputs to match
  
     def reportStatData(self): ## override
+        #print("\n{} Pressure Values:{}".format(self.loc,self.sensor.values))  ## DEBUG
+        #print("Pressure Parameter:{}. StatData Avg:{:5.4f},Min:{:5.4f},Max:{:5.4f},Rng:{:5.4f},RngMin:{:5.4f},RngMax:{:5.4f}".format(self.loc,self.avgVal(), \
+        #        self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()))  ## DEBUG
         return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] #TODO change range value outputs
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
