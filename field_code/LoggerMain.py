@@ -271,7 +271,7 @@ def closeOutRecord():      # DC 11.28
     #print("TC14's Values are:{}".format(Lib.tcs[14].values)) ## DEBUG
     Lib.scans_accum.setValue(number_of_samples) #Set accumulator count
     #print("scans_accum is now: {}".format(Lib.scans_accum.values))  ## DEBUG
-    Lib.sec_count.setValue((math.trunc(scantime - lastRecordTime))) 
+    Lib.sec_count.setValue(int(round(Decimal(scantime-lastRecordTime),0))) 
     #print("sec_count is now: {}".format(Lib.sec_count.values)) ## Debug
     # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
     # Place data values in record string (see xlsx file for list of parameters)
@@ -856,6 +856,27 @@ while True:
 
 
     ## Cleanup
+    
+    ## Check Filesize and Decide to create a new File
+    try:
+        statInfo = os.stat(dataFilename)
+        #print "filesize is: ", statInfo.st_size
+        dataFileSize = statInfo.st_size
+    except:
+        print("Unable to read filesize for {}".format(dataFilename))
+        dataFileSize = 0
+    if dataFileSize > Conf.maxFileSize:
+            try: 
+                dataFile.close()
+            except:
+                print("Unable to close old DATA file")
+            print("Reached max Data filesize of {} Creating a new file.".format(Conf.maxFileSize))
+            dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+Conf.siteName+"_Data.csv"
+            print("New file is: {}".format(dataFilename))
+            #Record headers to Data File (for Records)
+            dataFile = open(dataFilename,'ab')
+            dataFile.write(Lib.record(HEADER_REC)+"\n")
+            dataFile.close()
 
     #Service watchdog
     try: 
