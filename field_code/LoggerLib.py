@@ -993,7 +993,7 @@ class Param(object):
             self.values.append(value)
         else: 
             self.values[0] = value
-
+ 
 siteid = Param(["site"], [""], [Conf.siteName])
 timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])

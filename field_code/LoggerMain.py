@@ -477,10 +477,14 @@ f = Lib.furnace
 
 mon = Mon()
 
+# Check SiteName
+BBBsiteName = Conf.siteName
+if BBBsiteName == "none": #if the sitename hasn't been changed from default...
+    BBBsiteName = uniqueID
 #Generate a Filename and Path (for Records)
-dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+Conf.siteName+"_Data.csv"
+dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Data.csv"
 #Generate a Filename and Path (for Info/Diagnostics)
-diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+Conf.siteName+"_Info.csv"
+diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Info.csv"
 
 #Record headers to Data File (for Records)
 dataFile = open(dataFilename,'ab')
@@ -894,7 +898,7 @@ while True:
             except:
                 print("Unable to close old DATA file")
             print("Reached max Data filesize of {} Creating a new file.".format(Conf.maxFileSize))
-            dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+Conf.siteName+"_Data.csv"
+            dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Data.csv"
             print("New file is: {}".format(dataFilename))
             #Record headers to Data File (for Records)
             dataFile = open(dataFilename,'ab')
