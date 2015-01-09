@@ -227,22 +227,19 @@ def fetchPressure():
     pressureAvg = 0.0
     count = 0
     for i in range(25):
-        previous = time.time()
         try: 
             pressure_inH20 = Lib.p_zero.readPressure()
         except: 
             pressure_inH20 = NaN
             print("Pressure Reading Exception caught")
         if math.isnan(pressure_inH20):
+            #print("Pressure is: {}".format(pressure_inH20))
             count -=1
         else:
-          #print "Pressure is: {}".format(pressure_inH20),
-          #print "time delay is: {}".format(time.time()-previous)
+          #print("Pressure is: {}".format(pressure_inH20))
           pressureAvg = pressureAvg + pressure_inH20
         count += 1
-        delay = time.time()-previous
-        if delay > 0:
-            time.sleep(delay) 
+        time.sleep(0.0066) 
                                   ## pressure is updated every 9.5mSec for low power
                                   ## The delay between adc updates is 6 m sec 
                                   ## for 31 cycles then it does an internal 
@@ -253,7 +250,7 @@ def fetchPressure():
     if count != 0.0:
         pressureAvg = pressureAvg/count
     if False:      ## TEST PRINT
-        print("count is: {} ".format(count), end='')
+        print("count is: {}".format(count), end='')
         print("pressureAvg is: {}".format(pressureAvg))
     return pressureAvg # returns oversampled pressure reading in inH20
     pass
