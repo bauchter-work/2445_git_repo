@@ -525,17 +525,17 @@ class BurnerTc(Tc):
         return NaN if len(self.recent) <= 0 else math.fsum(self.recent)/len(self.recent)
 
 tcs = [
-  BurnerTc("TC1@U11", Adc.U11, Adc.MUX0),
-        Tc("TC2@U11", Adc.U11, Adc.MUX1),
-        Tc("TC3@U11", Adc.U11, Adc.MUX2),
-        Tc("TC4@U11", Adc.U11, Adc.MUX3),
+  BurnerTc("TC01@U11", Adc.U11, Adc.MUX0),
+        Tc("TC02@U11", Adc.U11, Adc.MUX1),
+        Tc("TC03@U11", Adc.U11, Adc.MUX2),
+        Tc("TC04@U11", Adc.U11, Adc.MUX3),
 
-        Tc("TC5@U13", Adc.U13, Adc.MUX0),
-        Tc("TC6@U13", Adc.U13, Adc.MUX1),
-  BurnerTc("TC7@U13", Adc.U13, Adc.MUX2),
-        Tc("TC8@U13", Adc.U13, Adc.MUX3),
+        Tc("TC05@U13", Adc.U13, Adc.MUX0),
+        Tc("TC06@U13", Adc.U13, Adc.MUX1),
+  BurnerTc("TC07@U13", Adc.U13, Adc.MUX2),
+        Tc("TC08@U13", Adc.U13, Adc.MUX3),
 
-        Tc("TC9@U14",  Adc.U14, Adc.MUX0),
+        Tc("TC09@U14",  Adc.U14, Adc.MUX0),
         Tc("TC10@U14", Adc.U14, Adc.MUX1),
         Tc("TC11@U14", Adc.U14, Adc.MUX2),
         Tc("TC12@U14", Adc.U14, Adc.MUX3),

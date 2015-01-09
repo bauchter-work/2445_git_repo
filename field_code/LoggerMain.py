@@ -100,6 +100,7 @@ def get_free_space_bytes(folder):
     pass
 
 def fetchXbee(data):
+    global xbeeCaptureList #used for displaying captured values in stdout
     try:
         if False:       ## TEST PRINT
             print("Xbee data Received")
@@ -128,15 +129,18 @@ def fetchXbee(data):
                                             fields = param.reportScanData()
                                             if (param.reportHeaders() == ['n_xbee1']) and sensor.name == "xbee-0":
                                                 #print("n_xbee1 and xbee-0 Match")  ## DEBUG
-                                                print(" XB1:{:>4.2f} ".format(sensor.getLastVal()),end='')
+                                                xbeeCaptureList[0] = sensor.getLastVal()
+                                                #print(" XB1:{:>4.2f} ".format(sensor.getLastVal()),end='') ## DEBUG
                                                 param.setValue(fields[0]+1)
                                             elif (param.reportHeaders() == ['n_xbee2']) and sensor.name == "xbee-1":
                                                 #print("n_xbee2 and xbee-1 Match")
-                                                print(" XB2:{:>4.2f} ".format(sensor.getLastVal()),end='')
+                                                xbeeCaptureList[1] = sensor.getLastVal()
+                                                #print(" XB2:{:>4.2f} ".format(sensor.getLastVal()),end='')
                                                 param.setValue(fields[0]+1)
                                             elif (param.reportHeaders() == ['n_xbee3']) and sensor.name == "xbee-2":
                                                 #print("n_xbee3 and xbee-2 Match")
-                                                print(" XB3:{:>4.2f} ".format(sensor.getLastVal()),end='')
+                                                xbeeCaptureList[2] = sensor.getLastVal()
+                                                #print(" XB3:{:>4.2f} ".format(sensor.getLastVal()),end='')
                                                 param.setValue(fields[0]+1)
                                     if y == "adc-2": # store VBATT into diagnostics Param
                                         for param in Lib.diagParams:
@@ -158,10 +162,11 @@ def fetchXbee(data):
 
 def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify reliable Data
     global currentCO2value #used for handing off CO2 Value
+    global adcCaptureList # contains list elements with [sensor.name, sensor.getLastVal()]
     for mux in range(Lib.Adc.NMUX):
         for job in range(3): ## [ start, sleep, fetch ]
             for sensor in Lib.ains:
-                if sensor.use and sensor.mux == mux: # and sensor.name == "TC5@U13":
+                if sensor.use and sensor.mux == mux: # and sensor.name == "TC05@U13":
                     adc = sensor.adc
                     if (job == 0): ## start
                         try:
@@ -190,14 +195,16 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                                 result = sensor.getLastVal()
                             elif sensor.name == "J25-1@U9": #CO2 input
                                 currentCO2value = Value #handoff to main loop
+                                result = Value * 2 # conversion to CO2 ppm
                                 #print("CurrentCO2value set to {}".format(currentCO2value))
                             else:
                                 #print("this is not a TC."),  #DBG
-                                result = Value #TODO other conversions?
                                 #print("{} \tResult: {}mV"\
                                 #    .format(sensor.name,result))
-                                sensor.appendAdcValue(result)   ## TODO caution - should append only if accumulating longer record
-                            print("{:4.0f} " .format(result), end='')    ## DWC 12.16 put output on one line for readability
+                                sensor.appendAdcValue(Value)
+                                result = sensor.getLastVal()
+                            adcCaptureList.append([sensor.name,result])
+                            #print("{:4.0f} " .format(result), end='')    ## DWC 12.16 put output on one line for readability
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
                                     .format(sensor.name, adc.addr, mux, err))
@@ -265,7 +272,7 @@ def fetchPressure():
 #    pass
 
 def closeOutRecord():      # DC 11.28 
-    # Number of samples = sensorX.count where sensorX is e.g. TC1
+    # Number of samples = sensorX.count where sensorX is e.g. TC01
     number_of_samples = Lib.tcs[14].getValCntExceptLast() # this should be outdoor temp
     # Increment record number integer (This happens with Lib.record call.
     #print("TC14's Values are:{}".format(Lib.tcs[14].values)) ## DEBUG
@@ -514,6 +521,11 @@ co2_elapsed    = None
 press_elapsed  = None
 cnt = 0
 lastRecordTime = time.time()
+xbeeCaptureList = [NaN,NaN,NaN]
+adcCaptureList = list()
+
+#Print Header for stdout
+print(" Time  CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
 
 ## main loop
 Lib.Timer.start()
@@ -525,17 +537,28 @@ while True:
     scantime = Lib.Timer.stime()      
     Lib.timest.setValue(Lib.TIME(scantime)) # track/record latest timestamp
     #print("time at top of loop: {}".format(scantime))
-    if True:     ## TEST PRINT
-        print("{:>6.0f}" .format(scantime % 86400.0), end='')    ## % 86400 converts to seconds into GMT day, for testing only
+    if (math.trunc(scantime % 60)) == 0:
+        print(" Time  CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
+    #    print(" 72239 1204  606  607  607  342   67   65   64   65   66   65   66   66   65   64   63   63   63   64   64   64   0.26  NaN  NaN  NaN  0.14")
 
-    ## Scan all inputs
+    if True:     ## TEST PRINT
+        print("{:>6.0f} " .format(scantime % 86400.0), end='')    ## % 86400 converts to seconds into GMT day, for testing only
+    ## Scan all adc inputs
     fetchAdcInputs() 
-    ## DWC drop fetchTempsAdafruit()
-    #fetchTempsAdafruit([AdaAdcU11,AdaAdcU13,AdaAdcU14,AdaAdcU15])
+    ## Sort these by name
+    adcCaptureList.sort(key=lambda x: x[0])  # Sort list by first element, sensor.name
+    ## the CO2 input is scanned 3 times and is in the front of the list, so drop two front values ("J25-1@U9")
+    adcCaptureList.remove(adcCaptureList[0])
+    adcCaptureList.remove(adcCaptureList[0])
+    #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
+    for item in adcCaptureList:
+        print("{:4.0f} " .format(item[1]), end='')
+    adcCaptureList = list() # empty list
+    
     ## DWC 12.14 trial of fetch pressure() in line
     currentpressure = fetchPressure()
     if True:        ## TEST PRINT
-        print("{:>6.2f}".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
+        print("{:>6.2f} ".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
     
     #This following for loop for DBG  
     #for mux in range(Lib.Adc.NMUX):
@@ -854,9 +877,12 @@ while True:
     
     # DC 11.28 End of new code
 
-
+    ## Deliver any xbee values to std out
+    for item in xbeeCaptureList:
+        print("{:>4.2f} ".format(Decimal(item)),end='')
     ## Cleanup
-    
+    xbeeCaptureList = [NaN,NaN,NaN]  ## Reset values after stdout output.
+
     ## Check Filesize and Decide to create a new File
     try:
         statInfo = os.stat(dataFilename)
