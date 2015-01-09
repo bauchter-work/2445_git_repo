@@ -22,6 +22,7 @@ from __future__ import print_function
 
 import math, signal, time, gc
 from datetime import datetime
+import numbers
 from decimal import * ## https://docs.python.org/2/library/decimal.html
 from smbus import SMBus
 import Adafruit_BBIO.GPIO as GPIO
@@ -1158,6 +1159,7 @@ def record(recType):
     returnString = ""
     for param in params:
         fields = None
+        trimmedFields = list() #empty list
         #print("Param(s): {}".format(param.reportHeaders()))
         if (recType == HeaderRec):
             fields = param.reportHeaders()
@@ -1165,18 +1167,44 @@ def record(recType):
             fields = param.reportUnits()
         elif (recType == SingleScanRec):
             fields = param.reportScanData()
+            #print("Fields before:{}".format(fields))
             ## Increment record number integer
             if param.reportHeaders() == ['rec_num']:
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
+            for field in fields: ## convert precisions
+                #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
+                if param.reportHeaders()[0][0:2] == 't_':  #if temps
+                    trimmedFields.append(str.format("{:.1f}",field))
+                    #print("type Temp. Value: {}".format(trimmedFields[-1]))
+                elif isinstance(field,int): 
+                    trimmedFields.append(field)
+                elif isinstance(field, numbers.Number): #it's still a number
+                    trimmedFields.append(str.format("{:.6f}",field))
+                else:
+                    trimmedFields.append(field)
+            fields = list(trimmedFields) # replace with trimmed values
         elif (recType == MultiScanRec):
             fields = param.reportStatData()
+            #print("Fields before:{}".format(fields))
             ## Increment record number integer
             if param.reportHeaders() == ['rec_num']:
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
+            for field in fields: ## convert precisions
+                #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
+                if param.reportHeaders()[0][0:2] == 't_':  #if temps
+                    trimmedFields.append(str.format("{:.1f}",field))
+                    #print("type Temp. Value: {}".format(trimmedFields[-1]))
+                elif isinstance(field,int): 
+                    trimmedFields.append(field)
+                elif isinstance(field, numbers.Number): #it's still a number
+                    trimmedFields.append(str.format("{:.6f}",field))
+                else:
+                    trimmedFields.append(field)
+            fields = list(trimmedFields) # replace with trimmed values
         #print("Fields:{}".format(fields))
         commaIndex = 0
         for field in fields:
