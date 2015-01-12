@@ -46,6 +46,9 @@ UNITS_REC = 1
 SINGLE_SCAN_REC = 2
 MULTI_SCAN_REC = 3
 
+# Path for remote rsync
+rsyncPath = "/home/frsa/Data/2445_CS/"
+
 ###########################################################################################
 ## setup / initialize
 
@@ -68,7 +71,6 @@ except:
 ## Load Configuration File
 try: 
     import LoggerConfig as Conf
-
 except:
     print("No LoggerConfig.py file available or error parsing")
     sys.exit()
@@ -318,7 +320,7 @@ def write1secRecord():      # DC 11.28
     ## assign scans_accum the length of t_outdoor values (should be = 1)
     Lib.scans_accum.setValue(Lib.tcs[14].getValCnt()) #Set accumulator count
     #print("scans_accum is now: {}".format(Lib.scans_accum.values))  ## DEBUG
-    Lib.sec_count.setValue(1) #TODO Set this as a one or as a calculation?
+    Lib.sec_count.setValue(1) #Set this as a one or as a calculation?
     # Write base of record string (timestamp, systemID, record #, mon.state, wh.mode, f.mode)
     # Place data values in record string (see xlsx file for list of parameters)
     # Min and max values will simply be set to the single parameter value
@@ -479,11 +481,24 @@ mon = Mon()
 
 # Check SiteName
 BBBsiteName = Conf.siteName
+## write handoff file that rsync file will use for rsync path and local path
+siteRsyncPathFile = open("siteRsyncPath","w")
 if BBBsiteName == "none": #if the sitename hasn't been changed from default...
     BBBsiteName = uniqueID
-#Generate a Filename and Path (for Records)
+siteRsyncPathFile.write(rsyncPath+BBBsiteName)  ## handoff file for rsync (path of sync destination)
+siteRsyncPathFile.close()
+
+siteLocalDataFile = open("localDataPath","w") ## additional handoff to rsync
+if Conf.savePath[-1:] == '/':
+    siteLocalDataFile.write(Conf.savePath)
+else:
+    siteLocalDataFile.write(Conf.savePath+'/')
+siteLocalDataFile.close()
+
+
+## Generate a Filename and Path (for Records)
 dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Data.csv"
-#Generate a Filename and Path (for Info/Diagnostics)
+## Generate a Filename and Path (for Info/Diagnostics)
 diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Info.csv"
 
 #Record headers to Data File (for Records)
@@ -498,8 +513,13 @@ BBB_id = Lib.Param(["BBB_ID"],[""],[uniqueID]) #Build any additional items TODO
 BBB_xBeeNodes = Lib.Param(["xBeeNodes"],["Hex Addresses"],[str(xBeeNodes).replace(","," ")])
 BBB_xBeeNodeTypes = Lib.Param(["xBeeNodeTypes"],["Sensor Type"],[str(xBeeNodeTypes).replace(","," ")])
 BBB_CO_Calibration = Lib.Param(["CO_Calib_Factor"],["int"],[Conf.co_calib_value])
-Lib.diagParams.extend([BBB_id,BBB_CO_Calibration,BBB_xBeeNodes,BBB_xBeeNodeTypes])
+BBB_WH_is_present = Lib.Param(["WHisPresent"],["bool"],[Conf.waterHeaterIsPresent])
+BBB_F_is_present = Lib.Param(["WHisPresent"],["bool"],[Conf.furnaceIsPresent])
+Lib.diagParams.extend([BBB_id, BBB_CO_Calibration, BBB_WH_is_present, \
+        BBB_F_is_present, BBB_xBeeNodes, BBB_xBeeNodeTypes])
 Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee2,vbatt_xbee3])
+BBB_rsync_save_path = Lib.Param(["rsync_savePath"],["string"],[rsyncPath+BBBsiteName])
+Lib.diagParams.extend([BBB_rsync_save_path])
 diagnosticsFile.write(Lib.diag_record(HEADER_REC)+"\n")
 diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
 diagnosticsFile.close()
@@ -577,7 +597,7 @@ while True:
     """
             if isinstance(sensor, Lib.Dlvr):
                 sensor.setValves()
-                sensor.appendValue(fetchPressure()) #TODO - do this right away or in Pressure Control?
+                sensor.appendValue(fetchPressure()) #do this right away or in Pressure Control?
             #   print "Pressure is: {}".format(sensor.getLastVal()) 
     """
         #if isinstance(sensor, Lib.Xbee):
@@ -676,8 +696,13 @@ while True:
     		       
     ## Pressure control routine
 
-    ## TODO set up initialization of valve list to reflect presence of wh and/or furn
+    ## set up initialization of valve list to reflect presence of wh and/or furn
     valvelistpress = [0,1,2,3]       ## Pressure controls are 0, 1, 2, 3
+    if Conf.waterHeaterIsPresent == False:
+        valvelistpress.remove(1)  # Solenoid 1 serves WH sampling
+    if Conf.furnaceIsPresent == False:
+        valvelistpress.remove(2) # Solenoid 2 is the Furnace sampling
+    
     if (pressstarttime == None):    ## Initialize pressure start on first scan
         valvepress = 0
         Lib.p_valve_pos.setValue(int(valvepress)) ## set initial value of Parameter "loc_p"
@@ -747,7 +772,7 @@ while True:
     if (mon.getprevState() in [4,6]):    ## States w/ no CO2 monitoring
         if (mon.getstate() == 1):        ## First burner just started, set up valves
             if(whmode == 1):             ## Check which appliance started, go there first.  Won't see an absent appliance.
-                valveco2 = 4             ## TODO Verify valve numbers.
+                valveco2 = 4             ## Verify valve numbers.
             else: 
                 valveco2 = 5        
         elif (mon.getstate() == 5):      ## Starting 1-min CO2 sampling during Off period
@@ -759,10 +784,15 @@ while True:
         Lib.co2_valve_pos.setValue(int(valveco2)) ## set initial value of Parameter "loc_co2"
      
     ## Valve cycling 
-    ## TODO set up initialization of valve list to reflect presence of wh and/or furn
+    ## set up initialization of valve list to reflect presence of wh and/or furn
+    valvelistco2 = [4,5,6]       ## Controls are numbered from 0; 4, 5, 6 are CO2 valves
+    if Conf.waterHeaterIsPresent == False:
+        valvelistco2.remove(4)  # Solenoid 1 serves WH sampling
+    if Conf.furnaceIsPresent == False:
+        valvelistco2.remove(5) # Solenoid 2 is the Furnace sampling
+    
     ## TODO check for negative numbers in all time difference tests (in case of massive clock error)
     ## DWC initialized co2starttime to None to avoid a fault on startup
-    valvelistco2 = [4,5,6]       ## Controls are numbered from 0; 4, 5, 6 are CO2 valves
     if (co2starttime != None):
         co2_elapsed = scantime - co2starttime
         if (((co2_elapsed) >= CO2VALVECYCLE) or ((co2_elapsed) < 0)):
@@ -824,7 +854,7 @@ while True:
             .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
                    
     
-    ## TODO Record control
+    ## Record control
     # DC 11.28 Start new code for Record Control
     # Is "scantime" the current time to 1 sec resolution?
     
@@ -849,8 +879,8 @@ while True:
     prev_state_60sec   = [5,6]      # Monitoring states with 60-sec record interval
     current_state_1sec = [1,2,3,4]  # Monitoring states with 1-sec record interval
     
-    ## Check triggers for closing out a 60-sec record  ##TODO
-    if ((mon.getprevState() in prev_state_60sec) and ((math.trunc(scantime) % 60) == 0)): 
+    ## Check triggers for closing out a 60-sec record 
+    if ((mon.getprevState() in prev_state_60sec) and ((math.trunc(scantime) % 60) == 0)):  #TODO use Round, not trunc?
         #print("Closing out Record")  ## DEBUG
         closeOutRecord()    ## close out accumulated record
         lastRecordTime = scantime
@@ -867,7 +897,7 @@ while True:
         
     # Check current state; either write 1-sec record or accumulate values
     # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
-    #  a single scan.  :TODO
+    #  a single scan.  TODO - test this fully
     if (mon.getstate() in current_state_1sec):
         #print("Writing 1sec Record")  ## DEBUG
         write1secRecord()
@@ -912,7 +942,7 @@ while True:
     except:
         print("unable to write to watchdog")
     
-    # Check memory periodically? Create new File periodically? #TODO
+    # Check memory periodically? #TODO
     #freeDiskSpace = get_free_space_bytes(Conf.savePath)
     #if freeDiskSpace < 1000000:     
     #    print "Disk is full. Exiting"

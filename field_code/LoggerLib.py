@@ -1000,7 +1000,7 @@ timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
 recnum = Param(["rec_num"],["integer"],[0])
 
 params = [siteid, timest, recnum] ## alnum, utc, int
-diagParams = [timest,siteid] ## set for diagnostic file's parameters TODO
+diagParams = [timest,siteid] ## set for diagnostic file's parameters
 
 def DEC(number):
     return Decimal(number) #"{:d}".format(number)
@@ -1106,13 +1106,13 @@ class PressureParam(SampledParam):
         SampledParam.__init__(self, [fix+"", fix+"_min", fix+"_max", fix+"_rng", fix+"_rng_min", fix+"_rng_max"], ["kpa", "kpa", "kpa", "kpa", "kpa", "kpa"], loc, sensor) 
 
     def reportScanData(self): ## override
-        return [self.val(), self.val(), self.val(), self.val(), self.val(), self.val()] #TODO change range value outputs to match
+        return [self.val(), self.val(), self.val(), self.val(), self.val(), self.val()]
  
     def reportStatData(self): ## override
         #print("\n{} Pressure Values:{}".format(self.loc,self.sensor.values))  ## DEBUG
         #print("Pressure Parameter:{}. StatData Avg:{:5.4f},Min:{:5.4f},Max:{:5.4f},Rng:{:5.4f},RngMin:{:5.4f},RngMax:{:5.4f}".format(self.loc,self.avgVal(), \
         #        self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()))  ## DEBUG
-        return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] #TODO change range value outputs
+        return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] 
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
 p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time
