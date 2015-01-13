@@ -656,7 +656,7 @@ class Dlvr(I2c, Sensor):
             #print "Pressure output is (in dec): ",Pressure
             #Calculate Pressure:
             Pressure_inH20 = 1.25*((float(Pressure)-8192)/(2**14))*4 # This is for the +/- 1 inH2O. We have a +/- 2 inH20 Sensor
-            Pressure_inH20 = Pressure_inH20 / 2.0 # scale for new sensor.
+            Pressure_inH20 = Pressure_inH20 #/ 2.0 # scale for new sensor.
             #print "Pressure, converted is: ",format(Pressure_inH20,'0.6f'),"inH20"
             #Extract Temp Value:
             #Temp = (Response[2]<<3)+(Response[3]>>5)

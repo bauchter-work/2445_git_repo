@@ -36,7 +36,7 @@ import random
 ##########################################################################################
 ## Constants 
 CO2VALVECYCLE = 20   ## CO2 valve operating cycle (sec)
-CO2CLEARTIME  = 10   ## Time allowed for clearing CO2 system, good data comes after this
+CO2CLEARTIME  = 17   ## Time allowed for clearing CO2 system, good data comes after this
 PRESSVALVECYCLE = 3
 NaN = float('NaN')
 
