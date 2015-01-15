@@ -10,5 +10,5 @@
 # ASSUMES SSH keys have been generated and shared with rsync destination!
 
 DATAPATH=$(cat localDataPath)
-RSYNCPATH=$(cat rsyncPath)
+RSYNCPATH=$(cat siteRsyncPath)
 rsync -avz -e ssh $DATAPATH frsa@app6.ecw.org:$RSYNCPATH
