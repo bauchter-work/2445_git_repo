@@ -546,7 +546,7 @@ xbeeCaptureList = [NaN,NaN,NaN]
 adcCaptureList = list()
 
 #Print Header for stdout
-print(" Time  CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
+print("  Time               CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
 
 ## main loop
 Lib.Timer.start()
@@ -559,11 +559,11 @@ while True:
     Lib.timest.setValue(Lib.TIME(scantime)) # track/record latest timestamp
     #print("time at top of loop: {}".format(scantime))
     if (math.trunc(scantime % 60)) == 0:
-        print(" Time  CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
+        print("  Time               CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
     #    print(" 72239 1204  606  607  607  342   67   65   64   65   66   65   66   66   65   64   63   63   63   64   64   64   0.26  NaN  NaN  NaN  0.14")
-
     if True:     ## TEST PRINT
-        print("{:>6.0f} " .format(scantime % 86400.0), end='')    ## % 86400 converts to seconds into GMT day, for testing only
+        scantimeSTRING = time.strftime("%Y-%m-%d %H:%M:%S",time.gmtime())
+        print("{} ".format(scantimeSTRING), end='')    ## % 86400 converts to seconds into GMT day, for testing only
     ## Scan all adc inputs
     fetchAdcInputs() 
     ## Sort these by name
