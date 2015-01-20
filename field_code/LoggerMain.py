@@ -387,8 +387,8 @@ class Mon(object):
 ## setup Xbee (must be after def of fetchXbee)
 xbee = zigbee.ZigBee(ser,callback=fetchXbee)  # for uart4 xbee coordinator
 try:
-    xBeeNodes = [ Conf.xBeeNode1, Conf.xBeeNode2, Conf.xBeeNode3 ] # create a list from value set
-    xBeeNodeTypes = [ Conf.xBeeNode1Type, Conf.xBeeNode2Type, Conf.xBeeNode3Type ] 
+    xBeeNodes = [ Conf.xBeeNode1.lower(), Conf.xBeeNode2.lower(), Conf.xBeeNode3.lower() ] # create a list from value set
+    xBeeNodeTypes = [ Conf.xBeeNode1Type.lower(), Conf.xBeeNode2Type.lower(), Conf.xBeeNode3Type.lower() ] 
     # TODO further error checking of these inputs
 except:
     print("Error Parsing Xbee Addresses and Types from the Configuration File. Exiting")
@@ -408,17 +408,17 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee1 = Lib.Param(["vbatt_xbee1"],["NA"],[Decimal(NaN)])  # empty
-        elif (xBeeNodeTypes[0] == "CT"):
+        elif (xBeeNodeTypes[0] == "ct"):
             vi_xbee1 = Lib.XbeeParam("vi_xbee1", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
-        elif (xBeeNodeTypes[0] == "Pressure"):
+        elif (xBeeNodeTypes[0] == "pressure"):
             vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[Decimal(NaN)]) # empty set
             vp_xbee1 = Lib.XbeeParam("vp_xbee1", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
             vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[Decimal(NaN)]) #empty set
             vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
-        elif (xBeeNodeTypes[0] == "Door"):
+        elif (xBeeNodeTypes[0] == "door"):
             vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[Decimal(NaN)]) # empty set
             vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee1 = Lib.XbeeParam("vpos_xbee1",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
@@ -432,17 +432,17 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee2 = Lib.Param(["vbatt_xbee2"],["NA"],[Decimal(NaN)])  # empty
-        elif (xBeeNodeTypes[1] == "CT"):
+        elif (xBeeNodeTypes[1] == "ct"):
             vi_xbee2 = Lib.XbeeParam("vi_xbee2", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
-        elif (xBeeNodeTypes[1] == "Pressure"):
+        elif (xBeeNodeTypes[1] == "pressure"):
             vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vp_xbee2 = Lib.XbeeParam("vp_xbee2", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
             vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
-        elif (xBeeNodeTypes[1] == "Door"):
+        elif (xBeeNodeTypes[1] == "door"):
             vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee2 = Lib.XbeeParam("vpos_xbee2",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
@@ -456,17 +456,17 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee3 = Lib.Param(["vbatt_xbee3"],["NA"],[Decimal(NaN)])  # empty
-        elif (xBeeNodeTypes[2] == "CT"):
+        elif (xBeeNodeTypes[2] == "ct"):
             vi_xbee3 = Lib.AinParam("vi_xbee3", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
-        elif (xBeeNodeTypes[2] == "Pressure"):
+        elif (xBeeNodeTypes[2] == "pressure"):
             vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vp_xbee3 = Lib.AinParam("vp_xbee3", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
             vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
-        elif (xBeeNodeTypes[2] == "Door"):
+        elif (xBeeNodeTypes[2] == "door"):
             vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee3 = Lib.AinParam("vpos_xbee3",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
@@ -479,7 +479,7 @@ f = Lib.furnace
 
 mon = Mon()
 
-# Check SiteName
+## Check SiteName
 BBBsiteName = Conf.siteName
 ## write handoff file that rsync file will use for rsync path and local path
 siteRsyncPathFile = open("siteRsyncPath","w")
@@ -495,6 +495,15 @@ else:
     siteLocalDataFile.write(Conf.savePath+'/')
 siteLocalDataFile.close()
 
+## Handoff of site's reverse SSH port to shell scripts:
+BBBreverseSSH = Conf.reverseSSHport
+## check if it's changed from default.
+if BBBreverseSSH == 7000: #if the port hasn't been changed from default...
+    print("BBB reverse SSH port configuration has not been set.  Open LoogerConfig.py and set it.  Exiting...")
+    sys.exit()
+siteRSSHPortFile = open("reverseSSHport","w")
+siteRSSHPortFile.write(str(BBBreverseSSH))  ## handoff port for scripts
+siteRSSHPortFile.close()
 
 ## Generate a Filename and Path (for Records)
 dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Data.csv"
@@ -515,8 +524,9 @@ BBB_xBeeNodeTypes = Lib.Param(["xBeeNodeTypes"],["Sensor Type"],[str(xBeeNodeTyp
 BBB_CO_Calibration = Lib.Param(["CO_Calib_Factor"],["int"],[Conf.co_calib_value])
 BBB_WH_is_present = Lib.Param(["WHisPresent"],["bool"],[Conf.waterHeaterIsPresent])
 BBB_F_is_present = Lib.Param(["WHisPresent"],["bool"],[Conf.furnaceIsPresent])
+BBB_reverseSSHport = Lib.Param(["reverseSSHport"],["int"],[Conf.reverseSSHport])
 Lib.diagParams.extend([BBB_id, BBB_CO_Calibration, BBB_WH_is_present, \
-        BBB_F_is_present, BBB_xBeeNodes, BBB_xBeeNodeTypes])
+        BBB_F_is_present, BBB_xBeeNodes, BBB_xBeeNodeTypes, BBB_reverseSSHport])
 Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee2,vbatt_xbee3])
 BBB_rsync_save_path = Lib.Param(["rsync_savePath"],["string"],[rsyncPath+BBBsiteName])
 Lib.diagParams.extend([BBB_rsync_save_path])

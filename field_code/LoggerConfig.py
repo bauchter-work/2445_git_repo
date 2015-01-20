@@ -12,18 +12,18 @@ waterHeaterIsPresent = True ## True or False - update if present
 furnaceIsPresent = True     ## True or False
 xBeeNode1 = "0xffff"   ## Declare End Node addresses for deployed xBee sensors (last 4 hex digits 
                        ##  in the long address of the xbee.
-xBeeNode1Type = "none"   ## type "CT", "Pressure", "Door", "none"    THESE ARE CASE SENSITIVE!
+xBeeNode1Type = "none"   ## type "CT", "Pressure", "Door", "none"   
 
 xBeeNode2 = "0xffff"   ## Node 2, use "0xffff" if not deployed
-xBeeNode2Type = "none" ## type "CT", "Pressure", "Door", "none"     THESE ARE CASE SENSITIVE!
+xBeeNode2Type = "none" ## type "CT", "Pressure", "Door", "none"    
 
 xBeeNode3 = "0xffff"   ## Node 3, use "0xffff" if not deployed
-xBeeNode3Type = "none" ## type "CT", "Pressure", "Door", "none"     THESE ARE CASE SENSITIVE!
+xBeeNode3Type = "none" ## type "CT", "Pressure", "Door", "none" 
 
 co_calib_value = 1700  ## replace with device-specific calibration number. Default = 1700
 
 savePath = "/srv/field-research/data/" ## location to store data on BBB
 
 maxFileSize = 750000000  ## Maximum data filesize before creating a new data file (don't exceed 1GB)
-
+reverseSSHport = 7000   ## Site specific port for contacting remotely
 
