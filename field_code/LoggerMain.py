@@ -61,7 +61,7 @@ except:
 
 ## Get UniqueID for BBB
 try:
-    os.system("/root/field-code/getUniqueID.sh") #run this to extract Serial Number for EEPROM
+    os.system("/srv/field-research/field-code/getUniqueID.sh") #run this to extract Serial Number for EEPROM
     uniqueFile = open("uniqueID",'r')
     uniqueID = uniqueFile.readline().rstrip('\n')
     #print "BBB unique ID is {}".format(uniqueID)
@@ -126,7 +126,7 @@ def fetchXbee(data):
                                 if matchAddress and str(y) == str(sensor.adc):  #adc-1 or adc-2
                                     #print '\t'+str(y),x[y]*0.001173,"volts",sensor.adc 
                                     sensor.appendAdcValue(x[y]) # convert and record into volts for both ADC-1 and ADC-2
-                                    if y == "adc-1": # increment correct n_xbee only once
+                                    if y == "adc-2": # increment correct n_xbee only once
                                         for param in Lib.params:
                                             fields = param.reportScanData()
                                             if (param.reportHeaders() == ['n_xbee1']) and sensor.name == "xbee-0":
@@ -144,7 +144,7 @@ def fetchXbee(data):
                                                 xbeeCaptureList[2] = sensor.getLastVal()
                                                 #print(" XB3:{:>4.2f} ".format(sensor.getLastVal()),end='')
                                                 param.setValue(fields[0]+1)
-                                    if y == "adc-2": # store VBATT into diagnostics Param
+                                    if y == "adc-1": # store VBATT into diagnostics Param
                                         for param in Lib.diagParams:
                                             if (param.reportHeaders() == ['vbatt_xbee1']) and sensor.name == "xbee-0":
                                                 #print("vbatt_xbee1 and xbee-0 Match, vbatt1 storing:{}".format(sensor.getLastVal()))

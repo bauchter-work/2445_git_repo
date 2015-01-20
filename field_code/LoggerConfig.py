@@ -22,7 +22,7 @@ xBeeNode3Type = "none" ## type "CT", "Pressure", "Door", "none"     THESE ARE CA
 
 co_calib_value = 1700  ## replace with device-specific calibration number. Default = 1700
 
-savePath = "/root/data/" ## location to store data on BBB
+savePath = "/srv/field-research/data/" ## location to store data on BBB
 
 maxFileSize = 750000000  ## Maximum data filesize before creating a new data file (don't exceed 1GB)
 
