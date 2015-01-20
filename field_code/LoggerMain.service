@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Field Code LoggerMain Service
+
+[Service]
+Type=simple 
+WorkingDirectory=/srv/field-research/field-code
+ExecStart=/bin/bash LoggerMainInit.sh
+SyslogIdentifier=LoggerMain_on_startup
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
