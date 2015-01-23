@@ -17,6 +17,8 @@
 ##                 - made significant revisions to calcMode()
 ## 2014-12-16 BenA - satisfied the records output header list. now to flesh out value capturing
 ## 2014-12-17 BenA - added unit conversions to the Sensor types 
+## 2015-01-22 DanC - Changed dTOff for burner status, dropped conversion of XBee output to volts
+
 
 from __future__ import print_function
 
@@ -707,7 +709,10 @@ class Xbee(Sensor):
     def appendAdcValue(self, value):
         value = value 
         #print '\t'+str(self.name),value*0.001173,"volts",sensor.adc
-        volts = value*0.001173 # per xbee adc conversion to volts
+        ## DWC 01.22 drop conversion to volts - raw value convenient, offers insight on resolution steps when fan is on
+        ## Should probably re-name it other than volts
+        volts = value #*0.001173 # per xbee adc conversion to volts
+        #volts = value*0.001173 # per xbee adc conversion to volts
         self.appendValue(volts)
         pass
 
@@ -909,8 +914,8 @@ waterHeaterIsPresent = (Conf.waterHeaterIsPresent is not None and Conf.waterHeat
 furnaceIsPresent = (Conf.furnaceIsPresent is not None and Conf.furnaceIsPresent == True)
 
 ## Set dTemps for identifying burner turn on and turn off in constructors
-waterHtr = Burner("waterHtr", 5, -2, 0, waterHeaterIsPresent)
-furnace = Burner("furnace", 5, -2, 6, furnaceIsPresent)
+waterHtr = Burner("waterHtr", 5, -5, 0, waterHeaterIsPresent)  ## DWC 01.22 changed both dT Off tests to -5F
+furnace = Burner("furnace", 5, -5, 6, furnaceIsPresent)
 burners = [waterHtr, furnace]
 
 ############################################
