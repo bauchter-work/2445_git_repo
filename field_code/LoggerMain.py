@@ -557,7 +557,8 @@ xbeeCaptureList = [NaN,NaN,NaN]
 adcCaptureList = list()
 
 #Print Header for stdout
-headerString = "       Time        CO2 door fn1 fn2  CO  WB  Sa  Sb  Sc  Sd  WV  FB  Sa  Sb  Sc  Sd  FV  Hi  Lo  To  --  Press  XB1  XB2  XB3 smp smp SP elap"
+headerString = "       Time        CO2 door fn1 fn2  CO  WB  Sa  Sb  Sc  Sd  WV  FB  Sa  Sb  Sc  Sd  FV  Hi  Lo  To  --\
+Press  XB1  XB2  XB3 smp smp SP V P V G elap"
 print(headerString)
 
 ## main loop
@@ -570,16 +571,6 @@ while True:
     scantime = Lib.Timer.stime()      
     Lib.timest.setValue(Lib.TIME(scantime)) # track/record latest timestamp
 
-    ## DWC 01.22 moved to after state control
-    """
-    #print("time at top of loop: {}".format(scantime))
-    if (math.trunc(scantime % 40)) == 0:
-        print("       Time          CO2 door  fan1 fan2  CO   WH S1  S2  S3 S4 WV  Fr  S1 S2 S3 S4 FV Hi Lo To 16 Press  XB1  XB2  XB3  elapsed")
-    #    print(" 72239 1204  606  607  607  342   67   65   64   65   66   65   66   66   65   64   63   63   63   64   64   64   0.26  NaN  NaN  NaN  0.14")
-    if True:     ## TEST PRINT
-        scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S",time.gmtime())
-        print("{} ".format(scantimeSTRING), end='')    ## % 86400 converts to seconds into GMT day, for testing only
-    """
     ## Scan all adc inputs
     fetchAdcInputs() 
     ## Sort these by name
@@ -587,13 +578,7 @@ while True:
     ## the CO2 input is scanned 3 times and is in the front of the list, so drop two front values ("J25-1@U9")
     adcCaptureList.remove(adcCaptureList[0])
     adcCaptureList.remove(adcCaptureList[0])
-    ## DWC 01.22 moved std out print statements to below
-    """
-    #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
-    for item in adcCaptureList:
-        print("{:3.0f} " .format(item[1]), end='')
-    adcCaptureList = list() # empty list
-    """
+    ## DWC 01.22 moved std out print statements to end of Main
     
     ## DWC 12.14 trial of fetch pressure() in line
     ## DWC 01.22 moved print to below with other std out print statements
@@ -995,9 +980,9 @@ while True:
     xbeeCaptureList = [NaN,NaN,NaN]  ## Reset values after stdout output.
 
     print("{:1d}{:1d}{:1d} {:1d}{:1d}{:1d}".format(wh.status, whmode, wh.prevMode, f.status, fmode, f.prevMode), end='')
-
-
     print(" {:1d}{:1d}".format(mon.state, mon.prevState), end='')
+    print(" {:1d} {:2.0f}".format(valvepress, press_elapsed), end='')
+    print(" {:1d} {:2.0f}".format(valveco2, co2_elapsed), end='')
                                                                         
                                                                                                                                                                                                                            
     print (" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
