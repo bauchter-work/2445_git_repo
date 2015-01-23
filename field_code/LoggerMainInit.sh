@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # This script runs at boot-up if the service is enabled 
 # First it launches the Logger program.
@@ -11,4 +11,14 @@
 # ASSUMES SSH keys have been generated and shared with rsync destination!
 /usr/bin/nohup /usr/bin/python /srv/field-research/field-code/LoggerMain.py >&/dev/null &
 RPORT=$(cat /srv/field-research/field-code/reverseSSHport)
-/usr/bin/ssh -fN -R $RPORT:localhost:22 frsa@app6.ecw.org >&/dev/null &
+
+createTunnel() {
+  /usr/bin/ssh -fN -R $RPORT:localhost:22 frsa@app6.ecw.org
+  if [[ $? -eq 0 ]]; then
+    echo Reverse Tunnel to app6 created successfully
+  else
+    echo An error occurred creating a reverse tunnel to app6. RC was $?
+  fi
+}
+echo creating new reverse tunnel connection
+createTunnel
