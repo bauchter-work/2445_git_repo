@@ -19,7 +19,8 @@
 ##                 - added control of pressure and CO2 valves 
 ## 2014.12.27 DanC - rearranged print statements to show output on one line only, starting with time (sec into GMT day)
 ##                 - dropped xbee print statement for testing
-##                 - 
+## 2015.01.22 DanC - Moved std out print statements to after all processing & edited header
+##                 - Added status, mode and state info to std out
 
  
 from __future__ import print_function
@@ -556,7 +557,8 @@ xbeeCaptureList = [NaN,NaN,NaN]
 adcCaptureList = list()
 
 #Print Header for stdout
-print("  Time               CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
+headerString = "       Time        CO2 door fn1 fn2  CO  WB  Sa  Sb  Sc  Sd  WV  FB  Sa  Sb  Sc  Sd  FV  Hi  Lo  To  --  Press  XB1  XB2  XB3 smp smp SP elap"
+print(headerString)
 
 ## main loop
 Lib.Timer.start()
@@ -567,13 +569,17 @@ while True:
     ## DWC changed "tick" to "scantime".  This does appear to be real time (sample value 1418757518.0 sec ~< 45 yrs)
     scantime = Lib.Timer.stime()      
     Lib.timest.setValue(Lib.TIME(scantime)) # track/record latest timestamp
+
+    ## DWC 01.22 moved to after state control
+    """
     #print("time at top of loop: {}".format(scantime))
-    if (math.trunc(scantime % 60)) == 0:
-        print("  Time               CO2  door fan1 fan2 CO   TC01 TC02 TC03 TC04 TC05 TC06 TC07 TC08 TC09 TC10 TC11 TC12 TC13 TC14 TC15 TC16 Press  XB1  XB2  XB3  elapsed")
+    if (math.trunc(scantime % 40)) == 0:
+        print("       Time          CO2 door  fan1 fan2  CO   WH S1  S2  S3 S4 WV  Fr  S1 S2 S3 S4 FV Hi Lo To 16 Press  XB1  XB2  XB3  elapsed")
     #    print(" 72239 1204  606  607  607  342   67   65   64   65   66   65   66   66   65   64   63   63   63   64   64   64   0.26  NaN  NaN  NaN  0.14")
     if True:     ## TEST PRINT
-        scantimeSTRING = time.strftime("%Y-%m-%d %H:%M:%S",time.gmtime())
+        scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S",time.gmtime())
         print("{} ".format(scantimeSTRING), end='')    ## % 86400 converts to seconds into GMT day, for testing only
+    """
     ## Scan all adc inputs
     fetchAdcInputs() 
     ## Sort these by name
@@ -581,15 +587,17 @@ while True:
     ## the CO2 input is scanned 3 times and is in the front of the list, so drop two front values ("J25-1@U9")
     adcCaptureList.remove(adcCaptureList[0])
     adcCaptureList.remove(adcCaptureList[0])
+    ## DWC 01.22 moved std out print statements to below
+    """
     #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
     for item in adcCaptureList:
-        print("{:4.0f} " .format(item[1]), end='')
+        print("{:3.0f} " .format(item[1]), end='')
     adcCaptureList = list() # empty list
+    """
     
     ## DWC 12.14 trial of fetch pressure() in line
+    ## DWC 01.22 moved print to below with other std out print statements
     currentpressure = fetchPressure()
-    if True:        ## TEST PRINT
-        print("{:>6.2f} ".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
     
     #This following for loop for DBG  
     #for mux in range(Lib.Adc.NMUX):
@@ -862,6 +870,7 @@ while True:
     if False:         ## TEST PRINT
         print ("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
             .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
+ 
                    
     
     ## Record control
@@ -917,13 +926,14 @@ while True:
     #    
     
     # DC 11.28 End of new code
-
+    ## DWC 01.22 move to be with other print statements
+    """
     ## Deliver any xbee values to std out
     for item in xbeeCaptureList:
         print("{:>4.2f} ".format(Decimal(item)),end='')
     ## Cleanup
     xbeeCaptureList = [NaN,NaN,NaN]  ## Reset values after stdout output.
-
+    """
     ## Check Filesize and Decide to create a new File
     try:
         statInfo = os.stat(dataFilename)
@@ -959,11 +969,43 @@ while True:
     #    sys.exit()
 
     executiontime = time.time()-scantime
+
+    
+    ## DWC 01.22 move all normal std out to here
+    #print("time at top of loop: {}".format(scantime))
+    if (math.trunc(scantime % 30)) == 0:
+        print(headerString)
+
+    if True:     ## TEST PRINT
+        scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S ",time.gmtime())
+        print("{} ".format(scantimeSTRING), end='')    ## % 86400 converts to seconds into GMT day, for testing only
+
+    #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
+    for item in adcCaptureList:
+        print("{:3.0f} " .format(item[1]), end='')
+    adcCaptureList = list() # empty list
+                                                                                           
+    if True:        ## TEST PRINT
+        print("{:>6.2f} ".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
+
+    ## Deliver any xbee values to std out
+    for item in xbeeCaptureList:
+        print("{:>4.2f} ".format(Decimal(item)),end='')
+    ## Cleanup
+    xbeeCaptureList = [NaN,NaN,NaN]  ## Reset values after stdout output.
+
+    print("{:1d}{:1d}{:1d} {:1d}{:1d}{:1d}".format(wh.status, whmode, wh.prevMode, f.status, fmode, f.prevMode), end='')
+
+
+    print(" {:1d}{:1d}".format(mon.state, mon.prevState), end='')
+                                                                        
+                                                                                                                                                                                                                           
     print (" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
     Lib.Timer.sleep()
     pass
-    print()
-    
+    print()      
+
+                    
   except KeyboardInterrupt: #DBG This is for debug (allows xbee halt and serial cleanup)
     break
 
