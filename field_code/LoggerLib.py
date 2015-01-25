@@ -648,7 +648,7 @@ class Dlvr(I2c, Sensor):
         Status = (Response[0]>>6) & 0xFF
         #print "Status bits are (in binary): ", format(Status,'02b')
         if Status != 0:
-            #print "Pressure Data not Ready!"
+            # print("Pressure Data not Ready!")  
             return float('NaN')
         else:
             #Extract Pressure Value:

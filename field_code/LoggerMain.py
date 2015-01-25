@@ -21,6 +21,8 @@
 ##                 - dropped xbee print statement for testing
 ## 2015.01.22 DanC - Moved std out print statements to after all processing & edited header
 ##                 - Added status, mode and state info to std out
+##                 - XBee values now just ADC count value
+## 2015.01.24 DanC - Changed scantime to use integer seconds
 
  
 from __future__ import print_function
@@ -545,20 +547,25 @@ lastDiagTime = time.time() - ((time.time() % 86400.0)+1)  ## First instantiation
 ## Initialization of values
 
 pressstarttime = None
+valvepress = 0
+press_elapsed  = None
+valvepressname = "-"
 co2starttime   = None    ## DWC messy, used to avoid error on first scan
 currentCO2value = Decimal("NaN") ## used in handoff between function calls within PythonMain
 valveindexco2  = None
 valveco2       = 0
+valveCO2name = "-"
 co2_elapsed    = None
-press_elapsed  = None
 cnt = 0
 lastRecordTime = time.time()
 xbeeCaptureList = [NaN,NaN,NaN]
 adcCaptureList = list()
 
 #Print Header for stdout
-headerString = "       Time        CO2 door fn1 fn2  CO  WB  Sa  Sb  Sc  Sd  WV  FB  Sa  Sb  Sc  Sd  FV  Hi  Lo  To  --\
-Press  XB1  XB2  XB3 smp smp SP V P V G elap"
+headerString = "                  -- CO2 -- door Fan Fan CO-   ---- Water Heater ----  ------- Furnace ------   T Room Out     \
+-- Press --  XB1  XB2  XB3 WH- Fur St elap\n\
+       Time        Vlv  ppm  mV  -1- -2- ppm  Br  Sa  Sb  Sc  Sd  Vt  Br  Sa  Sb  Sc  Sd  Vt  Hi  Lo  To  -- \
+Vlv   Pa   cnt  cnt  cnt smp smp SP elap"
 print(headerString)
 
 ## main loop
@@ -567,9 +574,12 @@ Lib.Timer.sleep()
 while True:
   try:  #NOTE this is for debug, except Keyboard Interrupt 
     ## Capture time at top of second
-    ## DWC changed "tick" to "scantime".  This does appear to be real time (sample value 1418757518.0 sec ~< 45 yrs)
-    scantime = Lib.Timer.stime()      
-    Lib.timest.setValue(Lib.TIME(scantime)) # track/record latest timestamp
+    ## DWC 01.24 changed to time.time() because stime() doesn't update after sleep cycle ends
+    ## scantimeusec now used for high-resolution timestamp, and scantime for 1-sec resolution
+    scantimeusec = time.time()      
+    Lib.timest.setValue(Lib.TIME(scantimeusec)) # track/record latest timestamp  (Is this used?)
+    ## DWC create scantimesec (integer seconds) for valve control; fractional seconds throw it off
+    scantime = math.trunc(scantimeusec)
 
     ## Scan all adc inputs
     fetchAdcInputs() 
@@ -579,10 +589,24 @@ while True:
     adcCaptureList.remove(adcCaptureList[0])
     adcCaptureList.remove(adcCaptureList[0])
     ## DWC 01.22 moved std out print statements to end of Main
+                                    
+    ## DWC 01.24 add valve designations to allow tracking valve positions in std out
+    if    valveco2 == 4:   valveCO2name = "W"
+    elif valveco2 == 5:   valveCO2name = "F"
+    elif valveco2 == 6:   valveCO2name = "R"
+    else:   valveCO2name = "-"
     
     ## DWC 12.14 trial of fetch pressure() in line
     ## DWC 01.22 moved print to below with other std out print statements
     currentpressure = fetchPressure()
+    ## DWC 01.24 add valve designations to allow tracking valve positions in std out
+    if    valvepress == 0:   valvepressname = "0"
+    elif valvepress == 1:   valvepressname = "W"
+    elif valvepress == 2:   valvepressname = "F"
+    elif valvepress == 3:   valvepressname = "Z"
+    else:   valvepressname = "-"
+
+  
     
     #This following for loop for DBG  
     #for mux in range(Lib.Adc.NMUX):
@@ -672,12 +696,12 @@ while True:
     ## else no change
     ## Cycle between states 5 and 6 when both burners are off
     if (mon.state == Mon.State6Off):
-        if ((math.trunc(scantime) % 900) < 60): ## in first minute of 15 minute interval
+        if ((scantime % 900) < 60): ## in first minute of 15 minute interval
             ## TODO set flag to start CO2 measurement?
             mon.state = Mon.State5OffCO2
         ## else no change
     elif (mon.state == Mon.State5OffCO2):
-        if ((math.trunc(scantime) % 900) >= 60): ## beyond first minute of 15 minute interval 
+        if ((scantime % 900) >= 60): ## beyond first minute of 15 minute interval 
             mon.state = Mon.State6Off
         ## else no change
     ## else no change
@@ -707,7 +731,7 @@ while True:
         valvelistpress.remove(2) # Solenoid 2 is the Furnace sampling
     
     if (pressstarttime == None):    ## Initialize pressure start on first scan
-        valvepress = 0
+        valvepress = 0  # This duplicates command issued during initialization
         Lib.p_valve_pos.setValue(int(valvepress)) ## set initial value of Parameter "loc_p"
         valveindexpress = 0
         pressstarttime = scantime
@@ -734,7 +758,7 @@ while True:
             Lib.p_valve_pos.setValue(int(valvepress)) ## update present valve setting
         except:
             print("could not execute CO2 valve indexing routine")
-    else: #wait for scan cycles before changing valve setting
+    else: #wait for scan cycles before changing valve setting  ## DWC 01.24 I don't think we use this:
         Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) ## increment valve dwell counter
         
     if (mon.getstate() in [4,6]):     ## No CO2 monitoring
@@ -823,7 +847,7 @@ while True:
                 .format (scantime-co2starttime))
             except:
                 print("could not execute press valve indexing routine")
-        else: ## wait for scan cycles before changing active valve
+        else: ## wait for scan cycles before changing active valve  ## DWC 01.24 I don't think this is used or needed:
             Lib.co2_valve_time.setValue(int(round(Decimal(scantime-co2starttime),0))) ## increment valve dwell counter
 
     if (mon.getstate() in [4,6]):     ## No CO2 monitoring
@@ -856,14 +880,11 @@ while True:
         print ("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
             .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
  
-                   
     
-    ## Record control
-    # DC 11.28 Start new code for Record Control
-    # Is "scantime" the current time to 1 sec resolution?
-    
+    ## Record control    
     ## Diagnostic record control (Do this before values get cleared).  Recorded daily
-    if ((((scantime - lastDiagTime) >= 86400.0) and (datetime.utcfromtimestamp(scantime).hour == 0) and (datetime.utcfromtimestamp(scantime).minute == 0)) or ((scantime - lastDiagTime) >= 129600)): #Daily Diagnostic Record
+    if ((((scantime - lastDiagTime) >= 86400.0) and (datetime.utcfromtimestamp(scantime).hour == 0)\
+        and (datetime.utcfromtimestamp(scantime).minute == 0)) or ((scantime - lastDiagTime) >= 129600)): #Daily Diagnostic Record
     #if ((((scantime - lastDiagTime) >= 60.0) and (datetime.utcfromtimestamp(scantime).second == 0)) or ((scantime - lastDiagTime) >= 180.0)): ## DEBUG Interval
         #print("Writing Diagnostics File")
         diagnosticsFile= open(diagnosticsFilename,'ab')
@@ -884,7 +905,7 @@ while True:
     current_state_1sec = [1,2,3,4]  # Monitoring states with 1-sec record interval
     
     ## Check triggers for closing out a 60-sec record 
-    if ((mon.getprevState() in prev_state_60sec) and ((math.trunc(scantime) % 60) == 0)):  #TODO use Round, not trunc?
+    if ((mon.getprevState() in prev_state_60sec) and ((scantime % 60) == 0)):  #TODO use Round, not trunc?
         #print("Closing out Record")  ## DEBUG
         closeOutRecord()    ## close out accumulated record
         lastRecordTime = scantime
@@ -964,14 +985,17 @@ while True:
     if True:     ## TEST PRINT
         scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S ",time.gmtime())
         print("{} ".format(scantimeSTRING), end='')    ## % 86400 converts to seconds into GMT day, for testing only
+    ## DWC 01.24 insert CO2 valve info (valve name for last value, new valve #, time on new valve
+    print("{:s}{:1d}{:2.0f} ".format(valveCO2name, valveco2, co2_elapsed), end='')
 
     #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
     for item in adcCaptureList:
         print("{:3.0f} " .format(item[1]), end='')
     adcCaptureList = list() # empty list
-                                                                                           
-    if True:        ## TEST PRINT
-        print("{:>6.2f} ".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
+
+    ## DWC 01.24 insert pressure valve info (valve name for last value, new valve #, time on new valve
+    print(" {:s}{:1d}{:1.0f}".format(valvepressname, valvepress,  press_elapsed), end='')
+    print("{:>6.2f} ".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
 
     ## Deliver any xbee values to std out
     for item in xbeeCaptureList:
@@ -981,16 +1005,12 @@ while True:
 
     print("{:1d}{:1d}{:1d} {:1d}{:1d}{:1d}".format(wh.status, whmode, wh.prevMode, f.status, fmode, f.prevMode), end='')
     print(" {:1d}{:1d}".format(mon.state, mon.prevState), end='')
-    print(" {:1d} {:2.0f}".format(valvepress, press_elapsed), end='')
-    print(" {:1d} {:2.0f}".format(valveco2, co2_elapsed), end='')
-                                                                        
-                                                                                                                                                                                                                           
     print (" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
+    
     Lib.Timer.sleep()
     pass
     print()      
-
-                    
+    
   except KeyboardInterrupt: #DBG This is for debug (allows xbee halt and serial cleanup)
     break
 
