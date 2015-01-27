@@ -18,6 +18,8 @@
 ## 2014-12-16 BenA - satisfied the records output header list. now to flesh out value capturing
 ## 2014-12-17 BenA - added unit conversions to the Sensor types 
 ## 2015-01-22 DanC - Changed dTOff for burner status, dropped conversion of XBee output to volts
+## 2015-01-22 DanC - Pressure converted immediately to Pa
+## 2015-01.26 DanC - added currentValue to Sensor, (and p_current as Dlvr object ?)
 
 
 from __future__ import print_function
@@ -394,8 +396,14 @@ class Sensor(object):
         self.name = name
         #self.values = collections.deque()
         self.values = list() ## https://docs.python.org/2/library/stdtypes.html#typesseq-mutable 
+        self.currentVal = 1.234
         pass
 
+    ## DWC 01.26 add a mechanism for capturing current value without appending to list
+    def setCurrentVal(self, passedvalue):
+        self.currentVal = passedvalue
+        pass
+        
     def clearValues(self):
         self.values = list()
         pass
@@ -628,7 +636,8 @@ class Dlvr(I2c, Sensor):
     valve_whvent = 1 ## 2
     valve_fvent = 2 ## 3
     valve_zone = 3 ## 4
-
+    valve_current = 9 ## Not used to set valves, p_current just used to capture new pressure before assignment to loc-specific parameter
+    
     def __init__(self, name, i2cIndex, valve):
         I2c.__init__(self, name, i2cIndex, addr=0x28)
         Sensor.__init__(self, name)
@@ -657,8 +666,9 @@ class Dlvr(I2c, Sensor):
             #print "Pressure output is (in hex): ",format(Pressure,'04x')
             #print "Pressure output is (in dec): ",Pressure
             #Calculate Pressure:
-            Pressure_inH20 = 1.25*((float(Pressure)-8192)/(2**14))*4 # This is for the +/- 1 inH2O. We have a +/- 2 inH20 Sensor
-            Pressure_inH20 = Pressure_inH20 #/ 2.0 # scale for new sensor.
+            ## DWC 01.25 corrected for 1 inch differential sensor used in final design
+            Pressure_inH20 = 1.25*((float(Pressure)-8192)/(2**14))*2 
+            Pressure_Pa = Pressure_inH20*248.84  ## Conversion from ASHRAE
             #print "Pressure, converted is: ",format(Pressure_inH20,'0.6f'),"inH20"
             #Extract Temp Value:
             #Temp = (Response[2]<<3)+(Response[3]>>5)
@@ -666,20 +676,30 @@ class Dlvr(I2c, Sensor):
             #print "Temperature output is (in dec): ",Tem
             #Temp_C = (float(Temp)*(float(200)/(2047)))-50
             #print "Temp, converted is: ",Temp_C,"deg. C"
-            return Pressure_inH20
+            return Pressure_Pa
         pass
-
+    
+    ## No need for new append, can use std Sensor class append        
+    """
     def appendAdcValue(self, value):
-        value = value #should come in as in_H20
-        resultPascals = Decimal(value)/Decimal(0.00401463078662)  ## converted to Pascals
-        self.appendValue(resultPascals)
+        #value = value #should come in as in_H20
+        #resultPascals = Decimal(value)/Decimal(0.00401463078662)  ## converted to Pascals
+        #self.appendValue(resultPascals)
+        ## DWC 01.25 simplified, values should already be in Pa
+        self.appendValue(value)
         pass
+    """
+    ## DWC 01.26 don't appear to need this, can use Sensor.setCurrentVal()
+    #def assignPressValue(self, value)
+        #pass
 
-p_zero = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zero)
-p_whvent = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_whvent)
-p_fvent = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_fvent)
-p_zone = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zone)
-p_sensors = [p_zero, p_whvent, p_fvent, p_zone]
+
+p_zero    = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zero)
+p_whvent  = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_whvent)
+p_fvent   = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_fvent)
+p_zone    = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_zone)
+p_current = Dlvr("DLVR@U12", I2c.I2C1, Dlvr.valve_current)
+p_sensors = [p_zero, p_whvent, p_fvent, p_zone]  ## Don't include p_current in list
 
 ## DWC 12.14 add sensors.extend here
 ##  Note does NOT use ains.extend like: ains.extend([door1, fan1, fan2, co]) 
@@ -994,6 +1014,9 @@ class Param(object):
     def reportStatData(self): ## len must match headers and units
         return self.values
 
+
+    ## DWC 01.25 Is this append correct?  <= 0 looks funny
+    ## It appears to be used in record setup: param.setValue(fields[0]+1)
     def setValue(self, value): ## storage for ad hoc params
         if (len(self.values) <= 0): 
             self.values.append(value)

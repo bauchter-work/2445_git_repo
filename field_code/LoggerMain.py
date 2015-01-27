@@ -23,7 +23,9 @@
 ##                 - Added status, mode and state info to std out
 ##                 - XBee values now just ADC count value
 ## 2015.01.24 DanC - Changed scantime to use integer seconds
-
+## 2015.01.25 DanC - Pressure values in Pa, apply zero offset
+## 2015.01.26 DanC - Assign pressure currentVal at time of measurement, but don't append until after record routine
+## 2015.01.26 DanC - Incorporated Ben's XBee edits
  
 from __future__ import print_function
 
@@ -133,9 +135,10 @@ def fetchXbee(data):
                                         for param in Lib.params:
                                             fields = param.reportScanData()
                                             if (param.reportHeaders() == ['n_xbee1']) and sensor.name == "xbee-0":
-                                                #print("n_xbee1 and xbee-0 Match")  ## DEBUG
+                                                #print("\r\nn_xbee1 and xbee-0 Match")  ## DEBUG
                                                 xbeeCaptureList[0] = sensor.getLastVal()
-                                                #print(" XB1:{:>4.2f} ".format(sensor.getLastVal()),end='') ## DEBUG
+                                                #print("\r\n XB1:{:>4.2f} ".format(sensor.getLastVal()),end='') ## DEBUG
+                                                #print("\r\nsetting Value: {}".format([fields[0]+1]))  ## DEBUG
                                                 param.setValue(fields[0]+1)
                                             elif (param.reportHeaders() == ['n_xbee2']) and sensor.name == "xbee-1":
                                                 #print("n_xbee2 and xbee-1 Match")
@@ -150,9 +153,9 @@ def fetchXbee(data):
                                     if y == "adc-1": # store VBATT into diagnostics Param
                                         for param in Lib.diagParams:
                                             if (param.reportHeaders() == ['vbatt_xbee1']) and sensor.name == "xbee-0":
-                                                #print("vbatt_xbee1 and xbee-0 Match, vbatt1 storing:{}".format(sensor.getLastVal()))
+                                                #print("\r\nvbatt_xbee1 and xbee-0 Match, vbatt1 storing:{}".format(sensor.getLastVal()))
                                                 param.setValue(sensor.getLastVal())
-                                                #print("Value of VBATT1 now:{}".format(param.values))  ## DEBUG
+                                                #print("\r\nValue of VBATT1 now:{}".format(param.values))  ## DEBUG
                                             elif (param.reportHeaders() == ['vbatt_xbee2']) and sensor.name == "xbee-1":
                                                 #print("vbatt_xbee2 and xbee-1 Match, vbatt2 storing:{}".format(sensor.getLastVal()))
                                                 param.setValue(sensor.getLastVal())
@@ -233,16 +236,16 @@ def fetchPressure():
     count = 0
     for i in range(25):
         try: 
-            pressure_inH20 = Lib.p_zero.readPressure()
+            pressure_Pa = Lib.p_current.readPressure()
         except: 
-            pressure_inH20 = NaN
+            pressure_Pa = NaN
             print("Pressure Reading Exception caught")
-        if math.isnan(pressure_inH20):
-            #print("Pressure is: {}".format(pressure_inH20))
+        if math.isnan(pressure_Pa):
+            #print("Pressure is: {}".format(pressure_Pa))
             count -=1
         else:
-          #print("Pressure is: {}".format(pressure_inH20))
-          pressureAvg = pressureAvg + pressure_inH20
+          #print("Pressure is: {}".format(pressure_Pa))
+          pressureAvg = pressureAvg + pressure_Pa
         count += 1
         time.sleep(0.0066) 
                                   ## pressure is updated every 9.5mSec for low power
@@ -273,6 +276,7 @@ def fetchPressure():
 #        #sensor.appendAdcValue(sensor.currentvalue) 
 #    pass
 
+
 def closeOutRecord():      # DC 11.28 
     # Number of samples = sensorX.count where sensorX is e.g. TC01
     number_of_samples = Lib.tcs[14].getValCntExceptLast() # this should be outdoor temp
@@ -295,7 +299,7 @@ def closeOutRecord():      # DC 11.28
     for sensor in Lib.sensors:
         #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
         if isinstance(sensor, Lib.Xbee): 
-           if sensor.adc != "adc-2":  #single out VBAT as do-not-delete
+           if sensor.adc != "adc-1":  #single out VBAT as do-not-delete
                sensor.clearValues()
            #else:
                #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
@@ -336,7 +340,7 @@ def write1secRecord():      # DC 11.28
     for sensor in Lib.sensors:
         #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
         if isinstance(sensor, Lib.Xbee): 
-           if sensor.adc != "adc-2":  #single out VBAT as do-not-delete
+           if sensor.adc != "adc-1":  #single out VBAT as do-not-delete
                sensor.clearValues()
            #else:
                #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
@@ -399,9 +403,9 @@ except:
     
 for x in range(len(xBeeNodes)):  # for each xbee end node in the network
     nodeAddress = xBeeNodes[x]
-    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=0,address=nodeAddress,use=True)   #adc-1
+    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=0,address=nodeAddress,use=True)   #adc-1 is vbatt
     Lib.sensors.extend([xbeeTemp])
-    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=1,address=nodeAddress,use=True)   #adc-2
+    xbeeTemp = Lib.Xbee(name=("xbee-"+str(x)),adcIndex=1,address=nodeAddress,use=True)   #adc-2 is analog in
     Lib.sensors.extend([xbeeTemp])
     # now instantiate all the xbee Params list for record keeping.  This could be made prettier...
     if (x == 0):
@@ -412,20 +416,20 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee1 = Lib.Param(["vbatt_xbee1"],["NA"],[Decimal(NaN)])  # empty
         elif (xBeeNodeTypes[0] == "ct"):
-            vi_xbee1 = Lib.XbeeParam("vi_xbee1", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
+            vi_xbee1 = Lib.XbeeParam("vi_xbee1", Lib.sensors[-1]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[Decimal(NaN)])    # empty set
-            vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         elif (xBeeNodeTypes[0] == "pressure"):
             vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[Decimal(NaN)]) # empty set
-            vp_xbee1 = Lib.XbeeParam("vp_xbee1", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
+            vp_xbee1 = Lib.XbeeParam("vp_xbee1", Lib.sensors[-1]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
             vpos_xbee1 = Lib.Param(["vpos_xbee1"],["NA"],[Decimal(NaN)]) #empty set
-            vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         elif (xBeeNodeTypes[0] == "door"):
             vi_xbee1 = Lib.Param(["vi_xbee1"], ["NA"],[Decimal(NaN)]) # empty set
             vp_xbee1 = Lib.Param(["vp_xbee1"], ["NA"],[Decimal(NaN)])       # empty set
-            vpos_xbee1 = Lib.XbeeParam("vpos_xbee1",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
-            vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vpos_xbee1 = Lib.XbeeParam("vpos_xbee1",Lib.sensors[-1]) # voltage value of door position, if any ("NaN" if not)
+            vbatt_xbee1 = Lib.XbeeParam("vbatt_xbee1",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         Lib.params.extend([n_xbee1, vi_xbee1, vp_xbee1, vpos_xbee1])
         print("Xbee {} Address is {}".format(x,nodeAddress))
     if (x == 1):
@@ -436,20 +440,20 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee2 = Lib.Param(["vbatt_xbee2"],["NA"],[Decimal(NaN)])  # empty
         elif (xBeeNodeTypes[1] == "ct"):
-            vi_xbee2 = Lib.XbeeParam("vi_xbee2", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
+            vi_xbee2 = Lib.XbeeParam("vi_xbee2", Lib.sensors[-1]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[Decimal(NaN)])    # empty set
-            vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         elif (xBeeNodeTypes[1] == "pressure"):
             vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
-            vp_xbee2 = Lib.XbeeParam("vp_xbee2", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
+            vp_xbee2 = Lib.XbeeParam("vp_xbee2", Lib.sensors[-1]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
             vpos_xbee2 = Lib.Param(["vpos_xbee2"],["NA"],[Decimal(NaN)])    # empty set
-            vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         elif (xBeeNodeTypes[1] == "door"):
             vi_xbee2 = Lib.Param(["vi_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
             vp_xbee2 = Lib.Param(["vp_xbee2"], ["NA"],[Decimal(NaN)])       # empty set
-            vpos_xbee2 = Lib.XbeeParam("vpos_xbee2",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
-            vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vpos_xbee2 = Lib.XbeeParam("vpos_xbee2",Lib.sensors[-1]) # voltage value of door position, if any ("NaN" if not)
+            vbatt_xbee2 = Lib.XbeeParam("vbatt_xbee2",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         Lib.params.extend([n_xbee2, vi_xbee2, vp_xbee2, vpos_xbee2])
         print("Xbee {} Address is {}".format(x,nodeAddress))
     if (x == 2):
@@ -460,20 +464,20 @@ for x in range(len(xBeeNodes)):  # for each xbee end node in the network
             vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[Decimal(NaN)])    # empty set
             vbatt_xbee3 = Lib.Param(["vbatt_xbee3"],["NA"],[Decimal(NaN)])  # empty
         elif (xBeeNodeTypes[2] == "ct"):
-            vi_xbee3 = Lib.AinParam("vi_xbee3", Lib.sensors[-2]) # voltage value of a current reading (should be "NaN" if not measuring current)
+            vi_xbee3 = Lib.AinParam("vi_xbee3", Lib.sensors[-1]) # voltage value of a current reading (should be "NaN" if not measuring current)
             vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[Decimal(NaN)])    # empty set
-            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         elif (xBeeNodeTypes[2] == "pressure"):
             vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
-            vp_xbee3 = Lib.AinParam("vp_xbee3", Lib.sensors[-2]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
+            vp_xbee3 = Lib.AinParam("vp_xbee3", Lib.sensors[-1]) # voltage value of a pressure reading ("NaN" if not measuring pressure)
             vpos_xbee3 = Lib.Param(["vpos_xbee3"],["NA"],[Decimal(NaN)])    # empty set
-            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         elif (xBeeNodeTypes[2] == "door"):
             vi_xbee3 = Lib.Param(["vi_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
             vp_xbee3 = Lib.Param(["vp_xbee3"], ["NA"],[Decimal(NaN)])       # empty set
-            vpos_xbee3 = Lib.AinParam("vpos_xbee3",Lib.sensors[-2]) # voltage value of door position, if any ("NaN" if not)
-            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-1]) # battery voltage (should always read, NaN if zero values accumulated)
+            vpos_xbee3 = Lib.AinParam("vpos_xbee3",Lib.sensors[-1]) # voltage value of door position, if any ("NaN" if not)
+            vbatt_xbee3 = Lib.AinParam("vbatt_xbee3",Lib.sensors[-2]) # battery voltage (should always read, NaN if zero values accumulated)
         Lib.params.extend([n_xbee3, vi_xbee3, vp_xbee3, vpos_xbee3])
         print("Xbee {} Address is {}".format(x,nodeAddress))
 
@@ -590,46 +594,34 @@ while True:
     adcCaptureList.remove(adcCaptureList[0])
     ## DWC 01.22 moved std out print statements to end of Main
                                     
-    ## DWC 01.24 add valve designations to allow tracking valve positions in std out
-    if    valveco2 == 4:   valveCO2name = "W"
-    elif valveco2 == 5:   valveCO2name = "F"
-    elif valveco2 == 6:   valveCO2name = "R"
-    else:   valveCO2name = "-"
-    
-    ## DWC 12.14 trial of fetch pressure() in line
-    ## DWC 01.22 moved print to below with other std out print statements
     currentpressure = fetchPressure()
-    ## DWC 01.24 add valve designations to allow tracking valve positions in std out
-    if    valvepress == 0:   valvepressname = "0"
-    elif valvepress == 1:   valvepressname = "W"
-    elif valvepress == 2:   valvepressname = "F"
-    elif valvepress == 3:   valvepressname = "Z"
-    else:   valvepressname = "-"
+    currentpressurevalve = valvepress
+    ## DWC 01.25 adjust for current zero offset, use try to avoid initialization problem
+    if Lib.p_zero.currentVal == NaN:
+        zeroOffset = 0
+    else:
+        zeroOffset = Lib.p_zero.currentVal 
 
+    if False:
+        print("Current pressure: {:7.3f} Zero offset: {:7.3f} Valve: {:02d}" .format(currentpressure, zeroOffset, currentpressurevalve))
+    try:
+        ## Update zero offset
+        if currentpressurevalve == 0:
+            Lib.p_zero.setCurrentVal(currentpressure)
+        else:
+            currentpressure = (currentpressure - zeroOffset)  ## Apply zero offset to stick through end of scan incl std out
+        ## Update other values
+        if currentpressurevalve == 1:
+            Lib.p_whvent.setCurrentVal(currentpressure)
+        elif currentpressurevalve == 2:
+            Lib.p_fvent.setCurrentVal(currentpressure)
+        elif currentpressurevalve == 3:
+            Lib.p_zone.setCurrentVal(currentpressure)
+    except:
+        print("could not set current pressure value") 
+    if False:
+        print("{:7.3f} {:7.3f} {:7.3f} {:7.3f}" .format(Lib.p_zero.currentVal, Lib.p_whvent.currentVal,Lib.p_fvent.currentVal, Lib.p_zone.currentVal))
   
-    
-    #This following for loop for DBG  
-    #for mux in range(Lib.Adc.NMUX):
-    #    for sensor in Lib.sensors:
-         ## DWC 12.14 code hangs up here (Tc object has no attribute 'getLastVal')
-        ##  so commented out
-    """
-            if isinstance(sensor, Lib.Tc) and sensor.mux == mux:
-                if (sensor.getLastVal()-sensor.getPrevVal())>4:
-                    print "Temp difference for {} is {}F".format(sensor.name,(sensor.getLastVal()-\
-                      sensor.getPrevVal()))
-    """
-    #Read Pressure sensor check
-    ## DWC 12.14 comment out, put in line above
-    """
-            if isinstance(sensor, Lib.Dlvr):
-                sensor.setValves()
-                sensor.appendValue(fetchPressure()) #do this right away or in Pressure Control?
-            #   print "Pressure is: {}".format(sensor.getLastVal()) 
-    """
-        #if isinstance(sensor, Lib.Xbee):
-        #    print "Xbee {} values: {}, {}".format(sensor.name,sensor.adc,sensor.getLastVal())
-                
     if False: #DEBUG for burner sequencing
         for burner in Lib.burners: ## DEBUG
             burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
@@ -737,6 +729,15 @@ while True:
         pressstarttime = scantime
     press_elapsed = scantime - pressstarttime
     if (((press_elapsed) >= PRESSVALVECYCLE) or ((press_elapsed) < 0)):
+        ## DWC 01.25 reduce this to just switching valves
+        valveindexpress = valvelistpress.index(valvepress)
+        valveindexpress += 1
+        if valveindexpress == (len(valvelistpress)):
+            valveindexpress = 0
+        valvepress = valvelistpress[valveindexpress]  
+        pressstarttime = scantime
+
+        """
         try:
             ## first store the fetched pressure for the previous valve setting
             if valvepress == 0:
@@ -754,16 +755,15 @@ while True:
                 valveindexpress = 0
             valvepress = valvelistpress[valveindexpress]  
             pressstarttime = scantime
-            Lib.p_valve_time.setValue(int(0)) ## reset time elapsed
-            Lib.p_valve_pos.setValue(int(valvepress)) ## update present valve setting
+            # Lib.p_valve_time.setValue(int(0)) ## reset time elapsed  ## DWC 01.25 dropping lines not used
+            # Lib.p_valve_pos.setValue(int(valvepress)) ## update present valve setting
         except:
-            print("could not execute CO2 valve indexing routine")
-    else: #wait for scan cycles before changing valve setting  ## DWC 01.24 I don't think we use this:
-        Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) ## increment valve dwell counter
+            print("could not execute pressure valve indexing routine")
+        """    
+    ## DWC 01.24 I don't think we use this:        
+    #else: 
+        #Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) ## increment valve dwell counter
         
-    if (mon.getstate() in [4,6]):     ## No CO2 monitoring
-        valveco2 = 0           
-
     ## Set valves
     if (valvepress == 0):
         Lib.p_zero_valve.setValue(1)
@@ -905,7 +905,7 @@ while True:
     current_state_1sec = [1,2,3,4]  # Monitoring states with 1-sec record interval
     
     ## Check triggers for closing out a 60-sec record 
-    if ((mon.getprevState() in prev_state_60sec) and ((scantime % 60) == 0)):  #TODO use Round, not trunc?
+    if ((mon.getprevState() in prev_state_60sec) and ((scantime % 60) == 0)):  
         #print("Closing out Record")  ## DEBUG
         closeOutRecord()    ## close out accumulated record
         lastRecordTime = scantime
@@ -927,19 +927,24 @@ while True:
         #print("Writing 1sec Record")  ## DEBUG
         write1secRecord()
         lastRecordTime = scantime
-    #else:
-    #    accumulateValues()    # Accumulate values only when not currently in 1-sec ## This should happen until they are closed out.
-    #    
-    
-    # DC 11.28 End of new code
-    ## DWC 01.22 move to be with other print statements
-    """
-    ## Deliver any xbee values to std out
-    for item in xbeeCaptureList:
-        print("{:>4.2f} ".format(Decimal(item)),end='')
-    ## Cleanup
-    xbeeCaptureList = [NaN,NaN,NaN]  ## Reset values after stdout output.
-    """
+    else:
+        #    accumulateValues()    # Accumulate values only when not currently in 1-sec ## This should happen until they are closed out.
+        ## DWC 01.26 Accumulate pressure values  IDEALLY ALL VALUES SHOULD BE ACCUMULATED AT THIS POINT IN CODE
+        Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
+        
+    ## Check values:    
+    for a in [0,1,2,3]:
+        print("Vlv: {:d} " .format(Lib.p_sensors[a].valve),end='')
+        try:
+            print("Len: {:d} ".format(len(Lib.p_sensors[a].values)),end='')
+            ##print("{:d} ".format(len(pressure_item.values)))
+            for x in range (len(Lib.p_sensors[a].values)):
+                print("{:6.2f}" .format(Lib.p_sensors[a].values[x]),end='' )
+        except:
+            print("Can't print pressure values using len(pressure_item.values))")
+        print("")
+ 
+ 
     ## Check Filesize and Decide to create a new File
     try:
         statInfo = os.stat(dataFilename)
@@ -974,13 +979,29 @@ while True:
     #    print "Disk is full. Exiting"
     #    sys.exit()
 
-    executiontime = time.time()-scantime
+    executiontime = time.time()-scantimeusec
 
     
     ## DWC 01.22 move all normal std out to here
     #print("time at top of loop: {}".format(scantime))
     if (math.trunc(scantime % 30)) == 0:
         print(headerString)
+
+    ## DWC 01.24 add valve designations to allow tracking valve positions in std out
+    ## Note currentpressurevalve is set when pressure is measured, not updated later
+    if   currentpressurevalve == 0:   valvepressname = "0"
+    elif currentpressurevalve == 1:   valvepressname = "W"
+    elif currentpressurevalve == 2:   valvepressname = "F"
+    elif currentpressurevalve == 3:   valvepressname = "Z"
+    else:   valvepressname = "-"
+
+    ## DWC 01.24 add valve designations to allow tracking valve positions in std out
+    if    valveco2 == 4:   valveCO2name = "W"
+    elif valveco2 == 5:   valveCO2name = "F"
+    elif valveco2 == 6:   valveCO2name = "R"
+    else:   valveCO2name = "-"
+
+
 
     if True:     ## TEST PRINT
         scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S ",time.gmtime())
@@ -995,7 +1016,7 @@ while True:
 
     ## DWC 01.24 insert pressure valve info (valve name for last value, new valve #, time on new valve
     print(" {:s}{:1d}{:1.0f}".format(valvepressname, valvepress,  press_elapsed), end='')
-    print("{:>6.2f} ".format((((currentpressure)/(0.00401463078662))/2)), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
+    print("{:>6.2f} ".format(currentpressure), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
 
     ## Deliver any xbee values to std out
     for item in xbeeCaptureList:
