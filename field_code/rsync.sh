@@ -18,13 +18,23 @@ RPORT=$(cat /srv/field-research/field-code/reverseSSHport)
 createTunnel() {
   /usr/bin/ssh -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -fN -R $RPORT:localhost:22 frsa@app6.ecw.org
   if [[ $? -eq 0 ]]; then
+    echo Reverse SSH Response: $?
     echo Reverse Tunnel to app6 created successfully
   else
     echo An error occurred creating a reverse tunnel to app6. RC was $?
   fi
 }
+/usr/bin/pgrep -f 'ssh .*' -l
+echo Process ID of SSH:
 /bin/pidof ssh
 if [[ $? -ne 0 ]]; then
-  echo Creating new reverse tunnel connection
+  echo Creating new reverse tunnel connection on port $RPORT
   createTunnel
+else 
+  echo Reverse SSH tunnel already open, presumably on port $RPORT
 fi
+echo Device External IP is:
+/usr/bin/curl -s curlmyip.com
+echo Disk Usage:
+/bin/df -h | grep /dev/mmcblk0p2
+
