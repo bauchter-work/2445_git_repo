@@ -24,7 +24,7 @@
 ##                 - XBee values now just ADC count value
 ## 2015.01.24 DanC - Changed scantime to use integer seconds
 ## 2015.01.25 DanC - Pressure values in Pa, apply zero offset
-## 2015.01.26 DanC - Assign pressure currentVal at time of measurement, but don't append until after record routine
+## 2015.01.26 DanC - Assign pressure currentVal at time of measurement, append values just before 1-sec records
 ## 2015.01.26 DanC - Incorporated Ben's XBee edits
  
 from __future__ import print_function
@@ -361,6 +361,15 @@ def write1secRecord():      # DC 11.28
     pass
 
 
+## DWC 01.27 temp fcn to see where PressureParams are accumulated
+"""
+def checkPressures():
+    print("PZero ",Lib.params[zeropress].reportScanData(),Lib.params[zeropress].reportStatData())
+    print("Pwh   ",Lib.params[whventpress].reportScanData(),Lib.params[whventpress].reportStatData())
+    print("Pfurn ",Lib.params.fventpress.reportScanData(),Lib.params.fventpress.reportStatData())
+    print("Pzone ",Lib.params.zonepress.reportScanData(),Lib.params.zonepress.reportStatData())
+    pass 
+"""
 
 class Mon(object):
     """the combustion monitor"""
@@ -584,7 +593,7 @@ while True:
     Lib.timest.setValue(Lib.TIME(scantimeusec)) # track/record latest timestamp  (Is this used?)
     ## DWC create scantimesec (integer seconds) for valve control; fractional seconds throw it off
     scantime = math.trunc(scantimeusec)
-
+    
     ## Scan all adc inputs
     fetchAdcInputs() 
     ## Sort these by name
@@ -593,7 +602,7 @@ while True:
     adcCaptureList.remove(adcCaptureList[0])
     adcCaptureList.remove(adcCaptureList[0])
     ## DWC 01.22 moved std out print statements to end of Main
-                                    
+                                                                        
     currentpressure = fetchPressure()
     currentpressurevalve = valvepress
     ## DWC 01.25 adjust for current zero offset, use try to avoid initialization problem
@@ -609,7 +618,11 @@ while True:
         if currentpressurevalve == 0:
             Lib.p_zero.setCurrentVal(currentpressure)
         else:
-            currentpressure = (currentpressure - zeroOffset)  ## Apply zero offset to stick through end of scan incl std out
+            ## Set current value to NaN during clearance period
+            if (press_elapsed < 2):
+                currentpressure = NaN
+            else:
+                currentpressure = (currentpressure - zeroOffset)  ## Apply zero offset to stick through end of scan incl std out
         ## Update other values
         if currentpressurevalve == 1:
             Lib.p_whvent.setCurrentVal(currentpressure)
@@ -622,6 +635,7 @@ while True:
     if False:
         print("{:7.3f} {:7.3f} {:7.3f} {:7.3f}" .format(Lib.p_zero.currentVal, Lib.p_whvent.currentVal,Lib.p_fvent.currentVal, Lib.p_zone.currentVal))
   
+      
     if False: #DEBUG for burner sequencing
         for burner in Lib.burners: ## DEBUG
             burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
@@ -787,8 +801,7 @@ while True:
         Lib.p_zone_valve.setValue(1)     
     else:
         print("No pressure valve set")
-    
-    
+
     
     ## CO2 control routine
     
@@ -919,7 +932,11 @@ while True:
         #print("Closing out Record")  ## DEBUG
         closeOutRecord()     
         lastRecordTime = scantime
-        
+
+    ## DWC 01.27 MOVED THIS LINE FROM BELOW TO SEE IF IT MAKES CURRENT VALUES AVAILABLE IN DATA RECORDS
+    Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
+
+                
     # Check current state; either write 1-sec record or accumulate values
     # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
     #  a single scan.  TODO - test this fully
@@ -930,8 +947,11 @@ while True:
     else:
         #    accumulateValues()    # Accumulate values only when not currently in 1-sec ## This should happen until they are closed out.
         ## DWC 01.26 Accumulate pressure values  IDEALLY ALL VALUES SHOULD BE ACCUMULATED AT THIS POINT IN CODE
-        Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
-        
+        ## DWC 01.27 MOVED THIS LINE TO ABOVE RECORDS TO SEE IF IT MAKES CURRENT VALUES AVAILABLE IN DATA RECORDS
+        #Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
+        pass
+
+                        
     ## Check values:    
     for a in [0,1,2,3]:
         print("Vlv: {:d} " .format(Lib.p_sensors[a].valve),end='')
@@ -1000,8 +1020,6 @@ while True:
     elif valveco2 == 5:   valveCO2name = "F"
     elif valveco2 == 6:   valveCO2name = "R"
     else:   valveCO2name = "-"
-
-
 
     if True:     ## TEST PRINT
         scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S ",time.gmtime())

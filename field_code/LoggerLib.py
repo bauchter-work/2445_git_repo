@@ -20,6 +20,7 @@
 ## 2015-01-22 DanC - Changed dTOff for burner status, dropped conversion of XBee output to volts
 ## 2015-01-22 DanC - Pressure converted immediately to Pa
 ## 2015-01.26 DanC - added currentValue to Sensor, (and p_current as Dlvr object ?)
+## 2015-01.27 DanC - Changed pressure output (std dev), shortened param headers
 
 
 from __future__ import print_function
@@ -31,6 +32,7 @@ from decimal import * ## https://docs.python.org/2/library/decimal.html
 from smbus import SMBus
 import Adafruit_BBIO.GPIO as GPIO
 import LoggerConfig as Conf
+#from statistics import stdev
 
 ######################################################
 ## buses, chips and protocols
@@ -1047,6 +1049,11 @@ class SampledParam(Param):
     def val(self):
         return DEC(self.sensor.getLastVal())
 
+    ## DWC 01.27 TODO ***
+    ## DWC 01.27 add alternate alt_setval for use with pressure and CO2, where param values are set conditionally on passing of clearance time
+    #def alt_setval(passedvalue)
+    #    self.alt
+
     def avgVal(self):
         return DEC(self.sensor.getAvgVal())
 
@@ -1072,27 +1079,28 @@ class TempParam(SampledParam):
     """includes all TC (sampled) parameters"""
     def __init__(self, loc, sensor):
         SampledParam.__init__(self, [loc+"", loc+"_min", loc+"_max"], ["deg. F", "deg. F", "deg. F"], loc, sensor) 
-
-t_whburner = TempParam("t_whburner", tcs[0])
-t_whspill1 = TempParam("t_whspill1", tcs[1])
-t_whspill2 = TempParam("t_whspill2", tcs[2])
-t_whspill3 = TempParam("t_whspill3", tcs[3])
-t_whspill4 = TempParam("t_whspill4", tcs[4])
-t_whvent = TempParam("t_whvent", tcs[5])
+        
+## DWC 01.27 shortened header designations to allow higher data display density
+t_whburner = TempParam("t_whbrn", tcs[0])
+t_whspill1 = TempParam("t_whsp1", tcs[1])
+t_whspill2 = TempParam("t_whsp2", tcs[2])
+t_whspill3 = TempParam("t_whsp3", tcs[3])
+t_whspill4 = TempParam("t_whsp4", tcs[4])
+t_whvent = TempParam("t_whvnt", tcs[5])
 params.extend([t_whburner, t_whspill1, t_whspill2, t_whspill3, t_whspill4, t_whvent])
 
-t_fburner = TempParam("t_fburner", tcs[6])
-t_fspill1 = TempParam("t_fspill1", tcs[7])
-t_fspill2 = TempParam("t_fspill2", tcs[8])
-t_fspill3 = TempParam("t_fspill3", tcs[9])
-t_fspill4 = TempParam("t_fspill4", tcs[10])
-t_fvent = TempParam("t_fvent", tcs[11])
+t_fburner = TempParam("t_fbrn", tcs[6])
+t_fspill1 = TempParam("t_fsp1", tcs[7])
+t_fspill2 = TempParam("t_fsp2", tcs[8])
+t_fspill3 = TempParam("t_fsp3", tcs[9])
+t_fspill4 = TempParam("t_fsp4", tcs[10])
+t_fvent = TempParam("t_fvnt", tcs[11])
 params.extend([t_fburner, t_fspill1, t_fspill2, t_fspill3, t_fspill4, t_fvent])
 
-t_zonehi = TempParam("t_zonehi", tcs[12])
-t_zonelow = TempParam("t_zonelow", tcs[13])
-t_outdoor = TempParam("t_outdoor", tcs[14])
-t_extra = TempParam("t_extra", tcs[15])
+t_zonehi = TempParam("t_zonhi", tcs[12])
+t_zonelow = TempParam("t_zonlow", tcs[13])
+t_outdoor = TempParam("t_out", tcs[14])
+t_extra = TempParam("t_xtra", tcs[15])
 params.extend([t_zonehi, t_zonelow, t_outdoor, t_extra])
 
 class AinParam(SampledParam):
@@ -1100,7 +1108,7 @@ class AinParam(SampledParam):
     def __init__(self, loc, sensor):
         SampledParam.__init__(self, [loc+"", loc+"_min", loc+"_max"], ["V", "V", "V"], loc, sensor) 
 
-pos_door1 = AinParam("pos_door1", door1) ## TODO
+pos_door1 = AinParam("pos_dr1", door1) ## TODO
 i_fan1 = AinParam("i_fan1", fan1)
 i_fan2 = AinParam("i_fan2", fan2)
 params.extend([pos_door1, i_fan1, i_fan2]) ## Bool, Amps, Amps TODO
@@ -1129,18 +1137,27 @@ params.extend([co2_valve_pos, co2_valve_time, whventco2, fventco2, zoneco2])
 
 class PressureParam(SampledParam):
     """includes all pressure (sampled) parameters"""
+    ## DWC 01.27 reduce to avg, range, and std dev for accumulated values
     def __init__(self, loc, sensor):
         fix = "p_"+loc
-        SampledParam.__init__(self, [fix+"", fix+"_min", fix+"_max", fix+"_rng", fix+"_rng_min", fix+"_rng_max"], ["kpa", "kpa", "kpa", "kpa", "kpa", "kpa"], loc, sensor) 
+        SampledParam.__init__(self, [fix+"", fix+"_rng", fix+"_stdev"], ["Pa", "Pa", "Pa"], loc, sensor) 
 
     def reportScanData(self): ## override
-        return [self.val(), self.val(), self.val(), self.val(), self.val(), self.val()]
+        
+        ## DWC 01.27 this doesn't work - try going back to original line, or add a reference to bring currentVal to PressureParam
+        ## 
+        #return [self.currentVal, self.currentVal, self.currentVal]
+        return [self.val(), self.val(), self.val()]
  
     def reportStatData(self): ## override
         #print("\n{} Pressure Values:{}".format(self.loc,self.sensor.values))  ## DEBUG
         #print("Pressure Parameter:{}. StatData Avg:{:5.4f},Min:{:5.4f},Max:{:5.4f},Rng:{:5.4f},RngMin:{:5.4f},RngMax:{:5.4f}".format(self.loc,self.avgVal(), \
         #        self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()))  ## DEBUG
-        return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] 
+        ## DWC 01.27 TODO Edit this to include only avg, range, and std dev.  Need to import stdev from statistics
+        ## This line is a temporary place holder
+        return [self.avgVal(), (self.maxVal()-self.minVal()), (self.maxVal()-self.minVal())]
+        #return [self.avgVal(), (self.maxVal()-self.minVal()), self.statistics.stdev()] 
+        #return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] 
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
 p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time
@@ -1160,8 +1177,8 @@ params.extend([whburner_stat,whburner_mode,fburner_stat, fburner_mode, monitor])
 scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
 sec_whrun = Param(["sec_whrun"],["integer"],[0]) # total accumulated run time, but output zero at end of 60-sec records
 sec_frun = Param(["sec_frun"],["integer"],[0]) # total accumulated run time, but always value of zero at end of 60sec recs
-sec_whcooldown = Param(["sec_whcooldown"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
-sec_fcooldown = Param(["sec_fcooldown"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+sec_whcooldown = Param(["sec_whcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+sec_fcooldown = Param(["sec_fcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
 sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages over the record period. # of secs since last rec
 params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
 
