@@ -13,7 +13,7 @@
 RPORT=$(cat /srv/field-research/field-code/reverseSSHport)
 
 createTunnel() {
-  /usr/bin/ssh -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -fN -R $RPORT:localhost:22 frsa@app6.ecw.org
+  /usr/bin/ssh -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -fN -R $RPORT:localhost:22 2445_CS@app6.ecw.org
   if [[ $? -eq 0 ]]; then
     echo SSH reverse Tunnel response was $?
     echo Reverse Tunnel to app6 created successfully
