@@ -21,6 +21,7 @@
 ## 2015-01-22 DanC - Pressure converted immediately to Pa
 ## 2015-01.26 DanC - added currentValue to Sensor, (and p_current as Dlvr object ?)
 ## 2015-01.27 DanC - Changed pressure output (std dev), shortened param headers
+## 2015-01.27 DanC - Added statistics, stdev, reduced data precision
 
 
 from __future__ import print_function
@@ -32,7 +33,8 @@ from decimal import * ## https://docs.python.org/2/library/decimal.html
 from smbus import SMBus
 import Adafruit_BBIO.GPIO as GPIO
 import LoggerConfig as Conf
-#from statistics import stdev
+# from statistics import stdev
+
 
 ######################################################
 ## buses, chips and protocols
@@ -471,6 +473,59 @@ class Sensor(object):
                 clippedValues.append(item)
             clippedValues.pop() #drop the last item
             return max(clippedValues)
+    
+    ## DWC 01.28 implement stdev, carried through to SampledParam
+    ## DWC 01.28 Not working, temporarily replace stdev with min 
+    def getStdDev(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
+        try:
+            if len(self.values) <= 2:
+                return NaN
+            else:
+                clippedValues = list()
+                for item in self.values:
+                    clippedValues.append(item)
+                clippedValues.pop() #drop the last item
+                ss = 0
+                for x in (clippedValues):
+                    ss = ss + x^2
+                standard_dev = (ss/len(clippedValues))^0.5
+                return standard_dev(clippedValues)
+        except:
+            print("stdev error")
+            return NaN
+            
+    ## DWC 01.29 Alternative versions of stat functions that include last value captured            
+    def getAvgValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN
+        else: 
+            return math.fsum(self.values)/len(self.values)
+
+    def getMinValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN 
+        else:
+            return min(self.values)
+
+    def getMaxValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN 
+        else:
+            return max(self.values)
+    
+    def getStdDevInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        try:
+            if len(self.values) <= 2:
+                return NaN
+            else:
+                ss = 0
+                for x in (self.values):
+                    ss = ss + x^2
+                standard_dev = (ss/len(self.values))^0.5
+                return standard_dev(self.values)
+        except:
+            print("stdev error")
+            return NaN    
 
 sensors = []
 
@@ -608,8 +663,9 @@ class CO2(Ain):
 
     def appendAdcValue(self, value):
         value = value
-        volts = value/1000
-        ppmCO2 = 2000 * volts   ## get this converted to engineering units (PPM)
+        ## move conversion to fetchAdc, so values are in engr units if used or viewed in loop before append is executed
+        #volts = value/1000
+        #ppmCO2 = 2000 * volts   ## get this converted to engineering units (PPM)
         self.appendValue(ppmCO2)
         pass
 
@@ -993,6 +1049,18 @@ class Timer(object):
 ############################################
 ## record parameters
 
+currentPressureValveGlobal = -1  ## initialize with meaningless value
+
+## DWC 01.29 Define new values to capture pressure valve number and CO2 valve number globally
+def setCurrentPressureValve(valvenum):
+    currentPressureValveGlobal = valvenum
+    pass 
+
+def getCurrentPressureValve():
+    return currentPressureValveGlobal
+    
+            
+
 def TIME(tm):
     return time.strftime("\"%Y-%m-%d %H:%M:%S\"",time.gmtime(tm))
 
@@ -1062,6 +1130,9 @@ class SampledParam(Param):
 
     def maxVal(self):
         return DEC(self.sensor.getMaxVal())
+
+    def stdDev(self):
+        return DEC(self.sensor.getStdDev())
 
     def valCnt(self):
         return self.sensor.getValCnt()
@@ -1137,6 +1208,7 @@ params.extend([co2_valve_pos, co2_valve_time, whventco2, fventco2, zoneco2])
 
 class PressureParam(SampledParam):
     """includes all pressure (sampled) parameters"""
+    global currentPressureValveGlobal
     ## DWC 01.27 reduce to avg, range, and std dev for accumulated values
     def __init__(self, loc, sensor):
         fix = "p_"+loc
@@ -1149,15 +1221,50 @@ class PressureParam(SampledParam):
         #return [self.currentVal, self.currentVal, self.currentVal]
         return [self.val(), self.val(), self.val()]
  
-    def reportStatData(self): ## override
+    ## **** TODO Change to select proper reportStatData() function, with or without last value 
+    def reportStatData(self): ## override using currentPressureValveGlobal to determine when last value is used
+        if True:       # currentPressureValveGlobal == 1:
+            ## Use min max for testing, then go to stddev
+            return [self.avgVal(), self.minVal(), self.maxVal()]
+            #return [self.avgVal(), (self.maxVal()-self.minVal()), self.stdDev()
+            pass
         #print("\n{} Pressure Values:{}".format(self.loc,self.sensor.values))  ## DEBUG
         #print("Pressure Parameter:{}. StatData Avg:{:5.4f},Min:{:5.4f},Max:{:5.4f},Rng:{:5.4f},RngMin:{:5.4f},RngMax:{:5.4f}".format(self.loc,self.avgVal(), \
         #        self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()))  ## DEBUG
         ## DWC 01.27 TODO Edit this to include only avg, range, and std dev.  Need to import stdev from statistics
-        ## This line is a temporary place holder
-        return [self.avgVal(), (self.maxVal()-self.minVal()), (self.maxVal()-self.minVal())]
-        #return [self.avgVal(), (self.maxVal()-self.minVal()), self.statistics.stdev()] 
+        # statistics throws errors
+     #   return [self.avgVal(), (self.maxVal()-self.minVal()), self.stdDev()] 
         #return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] 
+
+
+    """  # From SampledParam:
+    def avgVal(self):
+        return DEC(self.sensor.getAvgVal())
+
+    def minVal(self):
+        return DEC(self.sensor.getMinVal())
+
+    def maxVal(self):
+        return DEC(self.sensor.getMaxVal())
+
+    def stdDev(self):
+        return DEC(self.sensor.getStdDev())
+
+    def valCnt(self):
+        return self.sensor.getValCnt()
+
+    def other(self):
+        return "other"
+
+    def reportScanData(self): ## len must match headers and units
+        return [self.val(), self.val(), self.val()]
+
+    def reportStatData(self): ## len must match headers and units
+        return [self.avgVal(), self.minVal(), self.maxVal()]    
+    
+    """
+
+
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
 p_valve_time = Param(["sec_p"],["integer"],[0]) ## ad hoc param for reporting pressure valve open time
@@ -1226,19 +1333,39 @@ def record(recType):
                 elif isinstance(field,int): 
                     trimmedFields.append(field)
                 elif isinstance(field, numbers.Number): #it's still a number
-                    trimmedFields.append(str.format("{:.6f}",field))
+                    trimmedFields.append(str.format("{:.2f}",field))
                 else:
                     trimmedFields.append(field)
             fields = list(trimmedFields) # replace with trimmed values
         elif (recType == MultiScanRec):
-            fields = param.reportStatData()
+            
+            
+            """
+            ****
+            zeropress
+            whventpress
+            fventpress
+            zonepress
+            ## **** need pressure sensor valve attribute that tells us which pressure reading is being considered - AVAILABLE? 
+            if Lib.PressureSensor.Valve == getCurrentPressureValve():  #****  need to ID active valve, and report based on all values
+                fields = param.reportStatData()
+            else:
+                fields = param.reportStatData()
+            """  
+            try:
+                x = 1
+            except:
+                print("stuck at Lib L 1355 MultiScanRec")
+                        
+                
+            fields = param.reportStatData()    
             #print("Fields before:{}".format(fields))
             ## Increment record number integer
             if param.reportHeaders() == ['rec_num']:
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
                 #print("new recnum value:{}".format(param.reportScanData()))
-            for field in fields: ## convert precisions
+            for field in fields: ## convert precisions  ## TODO is this for loop needed, since we're already cycling through params?
                 #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
                 if param.reportHeaders()[0][0:2] == 't_':  #if temps
                     trimmedFields.append(str.format("{:.1f}",field))
@@ -1246,7 +1373,7 @@ def record(recType):
                 elif isinstance(field,int): 
                     trimmedFields.append(field)
                 elif isinstance(field, numbers.Number): #it's still a number
-                    trimmedFields.append(str.format("{:.6f}",field))
+                    trimmedFields.append(str.format("{:.2f}",field))
                 else:
                     trimmedFields.append(field)
             fields = list(trimmedFields) # replace with trimmed values
@@ -1288,3 +1415,5 @@ def diag_record(recType):
             commaIndex = commaIndex + 1
     #print("\n-End of record print-")
     return returnString
+
+

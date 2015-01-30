@@ -26,6 +26,7 @@
 ## 2015.01.25 DanC - Pressure values in Pa, apply zero offset
 ## 2015.01.26 DanC - Assign pressure currentVal at time of measurement, append values just before 1-sec records
 ## 2015.01.26 DanC - Incorporated Ben's XBee edits
+## 2015.01.28 DanC - Further tweaks to pressures, most of CO2
  
 from __future__ import print_function
 
@@ -37,11 +38,11 @@ import Adafruit_BBIO.UART as UART
 from xbee import zigbee
 import serial
 import random
-
+# from statistics import stdev
 ##########################################################################################
 ## Constants 
 CO2VALVECYCLE = 20   ## CO2 valve operating cycle (sec)
-CO2CLEARTIME  = 17   ## Time allowed for clearing CO2 system, good data comes after this
+CO2CLEARTIME  = 11   ## Time allowed for clearing CO2 system, good data comes after this
 PRESSVALVECYCLE = 3
 NaN = float('NaN')
 
@@ -202,8 +203,9 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                                 sensor.appendAdcValue(Value) # conversions for Tcs are performed in AdcValue.
                                 result = sensor.getLastVal()
                             elif sensor.name == "J25-1@U9": #CO2 input
-                                currentCO2value = Value #handoff to main loop
-                                result = Value * 2 # conversion to CO2 ppm
+                                # conversion to CO2 ppm, handoff to main loop, 
+                                volts = Value/1000
+                                currentCO2value = 2000 * volts   ## get this converted to engineering units (PPM)
                                 #print("CurrentCO2value set to {}".format(currentCO2value))
                             else:
                                 #print("this is not a TC."),  #DBG
@@ -211,7 +213,10 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                                 #    .format(sensor.name,result))
                                 sensor.appendAdcValue(Value)
                                 result = sensor.getLastVal()
-                            adcCaptureList.append([sensor.name,result])
+                            ## DWC 01.28 don't attempt to append CO2 value yet, watch clearance time and append in main loop    
+                            ## we're looping through sensors, so this should catch all non-co2 sensors
+                            if sensor.name[0:3] != "co2": 
+                                adcCaptureList.append([sensor.name,result])
                             #print("{:4.0f} " .format(result), end='')    ## DWC 12.16 put output on one line for readability
                         except Exception as err:
                             print("error fetching ADC for sensor {} on Adc at 0x{:02x} mux {}: {}"\
@@ -385,7 +390,6 @@ class Mon(object):
         self.__state = Mon.State6Off ## DWC 12.16 try this
 
     def getprevState(self): return self.__prevState
-    #def setprevState(self, value): self.__prevState = value
     def setprevState(self): self.__prevState = self.__state ## DWC 12.16 drop passed "value", always set to current state
     def delprevState(self): del self.__prevState
     prevState = property(getprevState, setprevState, delprevState, "'prevState' property")
@@ -559,16 +563,26 @@ lastDiagTime = time.time() - ((time.time() % 86400.0)+1)  ## First instantiation
 #################################################################################
 ## Initialization of values
 
-pressstarttime = None
+## DWC 01.28 re-work pressure initialization to allow press_elapsed to be calculated on first scan TODO 
+## Initialize
+
+# and/or
+pressstarttime = math.trunc(time.time())  # Obviates pressstarttime = None AND press_elapsed  = None
 valvepress = 0
-press_elapsed  = None
+Lib.p_zero.setCurrentVal(0)  ## Initialize zero offset
+## Set valves to zero offset measurement 
+Lib.p_zero_valve.setValue(1)
+Lib.p_whvent_valve.setValue(0)
+Lib.p_fvent_valve.setValue(0)
+Lib.p_zone_valve.setValue(0)     
 valvepressname = "-"
-co2starttime   = None    ## DWC messy, used to avoid error on first scan
+
+co2starttime   = None      ## DWC used to avoid error on first scan
 currentCO2value = Decimal("NaN") ## used in handoff between function calls within PythonMain
 valveindexco2  = None
 valveco2       = 0
 valveCO2name = "-"
-co2_elapsed    = None
+co2_elapsed    = 0   # Need to initialize to allow inclusion in std out 
 cnt = 0
 lastRecordTime = time.time()
 xbeeCaptureList = [NaN,NaN,NaN]
@@ -605,37 +619,95 @@ while True:
                                                                         
     currentpressure = fetchPressure()
     currentpressurevalve = valvepress
-    ## DWC 01.25 adjust for current zero offset, use try to avoid initialization problem
-    if Lib.p_zero.currentVal == NaN:
-        zeroOffset = 0
-    else:
-        zeroOffset = Lib.p_zero.currentVal 
+    Lib.setCurrentPressureValve(valvepress)
+    press_elapsed = scantime - pressstarttime
 
-    if False:
-        print("Current pressure: {:7.3f} Zero offset: {:7.3f} Valve: {:02d}" .format(currentpressure, zeroOffset, currentpressurevalve))
     try:
-        ## Update zero offset
-        if currentpressurevalve == 0:
-            Lib.p_zero.setCurrentVal(currentpressure)
+        ## Set current value (including zero offset) to NaN during clearance period
+        if (press_elapsed < 2):
+            currentpressure = NaN
         else:
-            ## Set current value to NaN during clearance period
-            if (press_elapsed < 2):
-                currentpressure = NaN
+            ## Update zero offset (but not wtih a NaN) to the most recent (single-second) value
+            if currentpressurevalve == 0:
+                zeroOffset = currentpressure
+                ## This still needed to pass value to sensor(?):
             else:
                 currentpressure = (currentpressure - zeroOffset)  ## Apply zero offset to stick through end of scan incl std out
-        ## Update other values
-        if currentpressurevalve == 1:
+        ## Update values INCLUDING writing NaN to p_zero  
+        ## DWC 01.28 I don't think we're using this at all, since we're appending currentpressure to p_sensors below
+        if currentpressurevalve == 0:
+            Lib.p_zero.setCurrentVal(currentpressure)
+        elif currentpressurevalve == 1:
             Lib.p_whvent.setCurrentVal(currentpressure)
         elif currentpressurevalve == 2:
             Lib.p_fvent.setCurrentVal(currentpressure)
         elif currentpressurevalve == 3:
-            Lib.p_zone.setCurrentVal(currentpressure)
+            Lib.p_zone.setCurrentVal(currentpressure)    
     except:
         print("could not set current pressure value") 
     if False:
         print("{:7.3f} {:7.3f} {:7.3f} {:7.3f}" .format(Lib.p_zero.currentVal, Lib.p_whvent.currentVal,Lib.p_fvent.currentVal, Lib.p_zone.currentVal))
-  
-      
+
+    ## DWC 01.28 MOVED THIS LINE FROM BELOW TO MAKE CURRENT VALUES AVAILABLE IN DATA RECORDS
+    ## DWC 01.29 in range doesn't work with float values
+    ## Note the range limits don't filter the values displayed in std out 
+    if ((currentpressure != NaN) and (currentpressure > -250.0) and (currentpressure < 250.0)):
+        Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
+
+ 
+    ## DWC 01.28 TODO CO2 assignment and filtering of values measured during clearance time       
+
+    
+
+    if valveco2 != 0:    ##  CO2 monitoring is active
+        co2_elapsed = scantime - co2starttime   ## Does not need to be repeated later
+        try:
+            ## Generate value of co2filtered, set to NaN during clearance period
+            ## currentCO2value is preserved to allow all CO2 values to show in std out
+            if (co2_elapsed < CO2CLEARTIME):
+                co2filtered = NaN
+            else: 
+                co2filtered = currentCO2value
+    
+            if valveco2 == 4:
+                #print("\nStoring {} into co2_whvent".format(currentCO2value))
+                Lib.co2_whvent.appendAdcValue(co2filtered)
+            elif valveco2 == 5:
+                #print("\nStoring {} into co2_fvent".format(currentCO2value))
+                Lib.co2_fvent.appendAdcValue(co2filtered) 
+            elif valveco2 == 6:
+                #print("\nStoring {} into co2_zone".format(currentCO2value))
+                Lib.co2_zone.appendAdcValue(co2filtered)            
+    
+        except:
+            print("Could not append CO2 values") 
+        
+            
+                    
+    
+
+    
+    
+#################################################################################################################################################################
+#################################################################################################################################################################
+
+    # co2_sensors = [co2_whvent, co2_fvent, co2_zone]
+    ## CO2
+    # Don't append CO2 values in adc routine
+    # CO2 adjust for units
+    # Check clearance time
+    # create new value for screen output (don't apply clearance time)
+    # If co2 values already in specific sensor names, OK, else assign to specific sensors
+    # append, like:
+    # Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
+
+#################################################################################################################################################################
+#################################################################################################################################################################
+
+    
+        
+            
+                    
     if False: #DEBUG for burner sequencing
         for burner in Lib.burners: ## DEBUG
             burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
@@ -735,13 +807,16 @@ while True:
         valvelistpress.remove(1)  # Solenoid 1 serves WH sampling
     if Conf.furnaceIsPresent == False:
         valvelistpress.remove(2) # Solenoid 2 is the Furnace sampling
+
     
+    ## DWC 01.28 this is no longer needed if pressstarttime is initialized to scantime TODO      
     if (pressstarttime == None):    ## Initialize pressure start on first scan
         valvepress = 0  # This duplicates command issued during initialization
         Lib.p_valve_pos.setValue(int(valvepress)) ## set initial value of Parameter "loc_p"
         valveindexpress = 0
         pressstarttime = scantime
-    press_elapsed = scantime - pressstarttime
+    ## DWC 01.28 move this calc of press_elapsed up to allow its use in pressure assignment
+    #press_elapsed = scantime - pressstarttime
     if (((press_elapsed) >= PRESSVALVECYCLE) or ((press_elapsed) < 0)):
         ## DWC 01.25 reduce this to just switching valves
         valveindexpress = valvelistpress.index(valvepress)
@@ -751,29 +826,6 @@ while True:
         valvepress = valvelistpress[valveindexpress]  
         pressstarttime = scantime
 
-        """
-        try:
-            ## first store the fetched pressure for the previous valve setting
-            if valvepress == 0:
-                Lib.p_zero.appendAdcValue(currentpressure)
-            elif valvepress == 1:
-                Lib.p_whvent.appendAdcValue(currentpressure)
-            elif valvepress == 2:
-                Lib.p_fvent.appendAdcValue(currentpressure)
-            elif valvepress == 3:
-                Lib.p_zone.appendAdcValue(currentpressure)
-            ## next, update valve index
-            valveindexpress = valvelistpress.index(valvepress)
-            valveindexpress += 1
-            if valveindexpress == (len(valvelistpress)):
-                valveindexpress = 0
-            valvepress = valvelistpress[valveindexpress]  
-            pressstarttime = scantime
-            # Lib.p_valve_time.setValue(int(0)) ## reset time elapsed  ## DWC 01.25 dropping lines not used
-            # Lib.p_valve_pos.setValue(int(valvepress)) ## update present valve setting
-        except:
-            print("could not execute pressure valve indexing routine")
-        """    
     ## DWC 01.24 I don't think we use this:        
     #else: 
         #Lib.p_valve_time.setValue(int(round(Decimal(scantime-pressstarttime),0))) ## increment valve dwell counter
@@ -832,11 +884,13 @@ while True:
         valvelistco2.remove(5) # Solenoid 2 is the Furnace sampling
     
     ## TODO check for negative numbers in all time difference tests (in case of massive clock error)
-    ## DWC initialized co2starttime to None to avoid a fault on startup
-    if (co2starttime != None):
-        co2_elapsed = scantime - co2starttime
+    ## DWC 01.28 now using valveco2 != 0 as flag for CO2 sampling active; valveco2 is initialized to 0
+    if valveco2 != 0:
+        # co2_elapsed = scantime - co2starttime  # Done earlier
         if (((co2_elapsed) >= CO2VALVECYCLE) or ((co2_elapsed) < 0)):
             try:
+                ## DWC 01.28 moved append up, and out of this conditional loop, which only saved one val per cycle
+                """
                 ## first store the fetched pressure for the previous valve setting
                 if valveco2 == 4:
                     #print("\nStoring {} into co2_whvent".format(currentCO2value))
@@ -847,6 +901,7 @@ while True:
                 elif valveco2 == 6:
                     #print("\nStoring {} into co2_zone".format(currentCO2value))
                     Lib.co2_zone.appendAdcValue(currentCO2value) # record sensor value
+                """
                 ## next, update valve index
                 valveindexco2 = valvelistco2.index(valveco2)
                 valveindexco2 += 1
@@ -859,12 +914,13 @@ while True:
                 print("CO2 valve indexing. Elapsed = {}"\
                 .format (scantime-co2starttime))
             except:
-                print("could not execute press valve indexing routine")
+                print("could not execute CO2 valve indexing routine")
         else: ## wait for scan cycles before changing active valve  ## DWC 01.24 I don't think this is used or needed:
             Lib.co2_valve_time.setValue(int(round(Decimal(scantime-co2starttime),0))) ## increment valve dwell counter
-
-    if (mon.getstate() in [4,6]):     ## No CO2 monitoring
-        valveco2 = 0           
+    ## Turn off CO2 monitoring when in state 4 or 6
+    if (mon.getstate() in [4,6]):     
+        valveco2 = 0  
+        co2_elapsed = 0         
 
 
     ## Set co2 valves
@@ -933,9 +989,6 @@ while True:
         closeOutRecord()     
         lastRecordTime = scantime
 
-    ## DWC 01.27 MOVED THIS LINE FROM BELOW TO SEE IF IT MAKES CURRENT VALUES AVAILABLE IN DATA RECORDS
-    Lib.p_sensors[currentpressurevalve].appendValue(currentpressure)
-
                 
     # Check current state; either write 1-sec record or accumulate values
     # Note we MAY close out a ~60-sec record AND write a 1-sec record during 
@@ -952,19 +1005,8 @@ while True:
         pass
 
                         
-    ## Check values:    
-    for a in [0,1,2,3]:
-        print("Vlv: {:d} " .format(Lib.p_sensors[a].valve),end='')
-        try:
-            print("Len: {:d} ".format(len(Lib.p_sensors[a].values)),end='')
-            ##print("{:d} ".format(len(pressure_item.values)))
-            for x in range (len(Lib.p_sensors[a].values)):
-                print("{:6.2f}" .format(Lib.p_sensors[a].values[x]),end='' )
-        except:
-            print("Can't print pressure values using len(pressure_item.values))")
-        print("")
- 
- 
+
+  
     ## Check Filesize and Decide to create a new File
     try:
         statInfo = os.stat(dataFilename)
@@ -1009,7 +1051,7 @@ while True:
 
     ## DWC 01.24 add valve designations to allow tracking valve positions in std out
     ## Note currentpressurevalve is set when pressure is measured, not updated later
-    if   currentpressurevalve == 0:   valvepressname = "0"
+    if   currentpressurevalve == 0:   valvepressname = "z"
     elif currentpressurevalve == 1:   valvepressname = "W"
     elif currentpressurevalve == 2:   valvepressname = "F"
     elif currentpressurevalve == 3:   valvepressname = "Z"
@@ -1025,7 +1067,7 @@ while True:
         scantimeSTRING = time.strftime("%y-%m-%d %H:%M:%S ",time.gmtime())
         print("{} ".format(scantimeSTRING), end='')    ## % 86400 converts to seconds into GMT day, for testing only
     ## DWC 01.24 insert CO2 valve info (valve name for last value, new valve #, time on new valve
-    print("{:s}{:1d}{:2.0f} ".format(valveCO2name, valveco2, co2_elapsed), end='')
+    print("{:s}{:1d}{:2.0f}{:4.0f} ".format(valveCO2name, valveco2, co2_elapsed, currentCO2value), end='')
 
     #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
     for item in adcCaptureList:
@@ -1045,10 +1087,34 @@ while True:
     print("{:1d}{:1d}{:1d} {:1d}{:1d}{:1d}".format(wh.status, whmode, wh.prevMode, f.status, fmode, f.prevMode), end='')
     print(" {:1d}{:1d}".format(mon.state, mon.prevState), end='')
     print (" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
+    print()
     
+    ## Check pressure values
+    ## THIS MAKES FOR A COOL CUMULATIVE PRINT OF PRESSURES AS THEY ACCUMULATE OVER A 60-SEC PERIOD 
+    #"""
+    for a in [0,1,2,3]:
+        print("Vlv: {:d} " .format(Lib.p_sensors[a].valve),end='')
+        print("Len: {:d} ".format(len(Lib.p_sensors[a].values)),end='')
+        ##print("{:d} ".format(len(pressure_item.values)))
+        for x in range (len(Lib.p_sensors[a].values)):
+            print("{:6.2f}" .format(Lib.p_sensors[a].values[x]),end='' )
+        print()
+    """
+    ## Similarly for CO2 
+    # co2_sensors = [co2_whvent, co2_fvent, co2_zone]
+    for a in [0,1,2]:
+        print("Vlv: {:d} " .format(Lib.co2_sensors[a].valve),end='')
+        print("Len: {:d} ".format(len(Lib.co2_sensors[a].values)),end='')
+        ##print("{:d} ".format(len(pressure_item.values)))
+        for x in range (len(Lib.co2_sensors[a].values)):
+            print("{:6.2f}" .format(Lib.co2_sensors[a].values[x]),end='' )
+        print("")
+    """        
+            
+                    
     Lib.Timer.sleep()
     pass
-    print()      
+    #print()      
     
   except KeyboardInterrupt: #DBG This is for debug (allows xbee halt and serial cleanup)
     break
@@ -1056,6 +1122,7 @@ while True:
 ## cleanup 
 xbee.halt()
 ser.close()
+## TODO add stop pump
 try: 
     dataFile.close()
 except:
