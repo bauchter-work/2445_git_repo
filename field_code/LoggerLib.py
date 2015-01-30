@@ -21,7 +21,9 @@
 ## 2015-01-22 DanC - Pressure converted immediately to Pa
 ## 2015-01.26 DanC - added currentValue to Sensor, (and p_current as Dlvr object ?)
 ## 2015-01.27 DanC - Changed pressure output (std dev), shortened param headers
-## 2015-01.27 DanC - Added statistics, stdev, reduced data precision
+## 2015-01.28 DanC - Added statistics, stdev, reduced data precision
+## 2015-01.29 DanC - Added new functions to find stats for 60-sec records inclusive of last value (pressure, CO2)
+##                 - Added screen for which pressure value is current when closing 60-sec record
 
 
 from __future__ import print_function
@@ -450,6 +452,13 @@ class Sensor(object):
             clippedValues.pop() #drop the last item
             return math.fsum(clippedValues)/len(clippedValues)
 
+    ## DWC 01.29 Alternative versions of stat functions that include last value captured            
+    def getAvgValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN
+        else: 
+            return math.fsum(self.values)/len(self.values)
+
     def getMinVal(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
         if len(self.values) <= 0:
             return NaN 
@@ -462,6 +471,12 @@ class Sensor(object):
             clippedValues.pop() #drop the last item
             return min(clippedValues)
 
+    def getMinValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN 
+        else:
+            return min(self.values)
+
     def getMaxVal(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
         if len(self.values) <= 0:
             return NaN 
@@ -473,6 +488,12 @@ class Sensor(object):
                 clippedValues.append(item)
             clippedValues.pop() #drop the last item
             return max(clippedValues)
+    
+    def getMaxValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
+        if len(self.values) <= 0:
+            return NaN 
+        else:
+            return max(self.values)
     
     ## DWC 01.28 implement stdev, carried through to SampledParam
     ## DWC 01.28 Not working, temporarily replace stdev with min 
@@ -488,31 +509,13 @@ class Sensor(object):
                 ss = 0
                 for x in (clippedValues):
                     ss = ss + x^2
-                standard_dev = (ss/len(clippedValues))^0.5
-                return standard_dev(clippedValues)
+                standard_dev = math.sqrt(ss/len(clippedValues))
+                return standard_dev
         except:
             print("stdev error")
             return NaN
             
-    ## DWC 01.29 Alternative versions of stat functions that include last value captured            
-    def getAvgValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
-        if len(self.values) <= 0:
-            return NaN
-        else: 
-            return math.fsum(self.values)/len(self.values)
 
-    def getMinValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
-        if len(self.values) <= 0:
-            return NaN 
-        else:
-            return min(self.values)
-
-    def getMaxValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
-        if len(self.values) <= 0:
-            return NaN 
-        else:
-            return max(self.values)
-    
     def getStdDevInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
         try:
             if len(self.values) <= 2:
@@ -521,8 +524,8 @@ class Sensor(object):
                 ss = 0
                 for x in (self.values):
                     ss = ss + x^2
-                standard_dev = (ss/len(self.values))^0.5
-                return standard_dev(self.values)
+                standard_dev = math.sqrt(ss/len(clippedValues))
+                return standard_dev
         except:
             print("stdev error")
             return NaN    
@@ -1125,14 +1128,26 @@ class SampledParam(Param):
     def avgVal(self):
         return DEC(self.sensor.getAvgVal())
 
+    def avgValInclusive(self):
+        return DEC(self.sensor.getAvgValInclusive())
+
     def minVal(self):
         return DEC(self.sensor.getMinVal())
+
+    def minValInclusive(self):
+        return DEC(self.sensor.getMinValInclusive())
 
     def maxVal(self):
         return DEC(self.sensor.getMaxVal())
 
+    def maxValInclusive(self):
+        return DEC(self.sensor.getMaxValInclusive())
+
     def stdDev(self):
         return DEC(self.sensor.getStdDev())
+
+    def stdDevInclusive(self):
+        return DEC(self.sensor.getStdDevInclusive())
 
     def valCnt(self):
         return self.sensor.getValCnt()
@@ -1221,49 +1236,17 @@ class PressureParam(SampledParam):
         #return [self.currentVal, self.currentVal, self.currentVal]
         return [self.val(), self.val(), self.val()]
  
-    ## **** TODO Change to select proper reportStatData() function, with or without last value 
     def reportStatData(self): ## override using currentPressureValveGlobal to determine when last value is used
         if True:       # currentPressureValveGlobal == 1:
             ## Use min max for testing, then go to stddev
             return [self.avgVal(), self.minVal(), self.maxVal()]
             #return [self.avgVal(), (self.maxVal()-self.minVal()), self.stdDev()
             pass
-        #print("\n{} Pressure Values:{}".format(self.loc,self.sensor.values))  ## DEBUG
-        #print("Pressure Parameter:{}. StatData Avg:{:5.4f},Min:{:5.4f},Max:{:5.4f},Rng:{:5.4f},RngMin:{:5.4f},RngMax:{:5.4f}".format(self.loc,self.avgVal(), \
-        #        self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()))  ## DEBUG
-        ## DWC 01.27 TODO Edit this to include only avg, range, and std dev.  Need to import stdev from statistics
-        # statistics throws errors
-     #   return [self.avgVal(), (self.maxVal()-self.minVal()), self.stdDev()] 
-        #return [self.avgVal(), self.minVal(), self.maxVal(), (self.maxVal()-self.minVal()), self.minVal(), self.maxVal()] 
 
-
-    """  # From SampledParam:
-    def avgVal(self):
-        return DEC(self.sensor.getAvgVal())
-
-    def minVal(self):
-        return DEC(self.sensor.getMinVal())
-
-    def maxVal(self):
-        return DEC(self.sensor.getMaxVal())
-
-    def stdDev(self):
-        return DEC(self.sensor.getStdDev())
-
-    def valCnt(self):
-        return self.sensor.getValCnt()
-
-    def other(self):
-        return "other"
-
-    def reportScanData(self): ## len must match headers and units
-        return [self.val(), self.val(), self.val()]
-
-    def reportStatData(self): ## len must match headers and units
-        return [self.avgVal(), self.minVal(), self.maxVal()]    
-    
-    """
-
+    ## DWC 01.29 add new fcn that does not drop last value
+    def reportStatDataInclusive(self): ## override using currentPressureValveGlobal to determine when last value is used
+            ## ***** Use min max for testing, then go to stddev
+            return [self.avgValInclusive(), self.minValInclusive(), self.maxValInclusive()]
 
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
@@ -1341,23 +1324,48 @@ def record(recType):
             
             
             """
-            ****
-            zeropress
-            whventpress
-            fventpress
-            zonepress
-            ## **** need pressure sensor valve attribute that tells us which pressure reading is being considered - AVAILABLE? 
-            if Lib.PressureSensor.Valve == getCurrentPressureValve():  #****  need to ID active valve, and report based on all values
-                fields = param.reportStatData()
-            else:
-                fields = param.reportStatData()
-            """  
-            try:
-                x = 1
-            except:
-                print("stuck at Lib L 1355 MultiScanRec")
-                        
+            p_sensors = [p_zero, p_whvent, p_fvent, p_zone]    
+            params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
                 
+            """  
+
+            if param.reportHeaders()[0][0:2] == "p_": 
+                if  (param.sensor.valve == getCurrentPressureValve()):
+                    fields = param.reportStatData()
+                else: 
+                    fields = param.reportStatDataInclusive()
+
+            """
+            try:   
+                if param.reportHeaders()[0][0:2] == 'p_': 
+                    print("Valve Number for Current param:  {:d} ".format (param.sensor.valve))
+            except:
+                print("stuck at Valve Number for Current param")
+                                                                                                         
+            try:
+                if param.reportHeaders()[0][0:2] == 'p_': 
+                    if (param.sensor.valve == 2):
+                        print("intial success")
+            except:
+                print("stuck at intial success")                                                                                                          
+ 
+            try:
+                if (param.reportHeaders()[0][0:2] == 'p_'): 
+                    print(param.sensor.getLastVal())
+                    # doesnt work: print("Sensor for current param: {:s} ".format (param.sensor))
+            except:
+                print("stuck at getLastVal()")
+
+            try:
+                if param.reportHeaders()[0][0:2] == 'p_': 
+                    if  (param.sensor.valve == getCurrentPressureValve()):
+                        print(param.sensor.getLastVal())
+                    # doesnt work: print("Sensor for current param: {:s} ".format (param.sensor))
+            except:
+                print("stuck at param.sensor.valve == getCurrentPressureValve()")
+            """   
+                               
+                                                             
             fields = param.reportStatData()    
             #print("Fields before:{}".format(fields))
             ## Increment record number integer

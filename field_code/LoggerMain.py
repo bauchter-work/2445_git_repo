@@ -27,7 +27,10 @@
 ## 2015.01.26 DanC - Assign pressure currentVal at time of measurement, append values just before 1-sec records
 ## 2015.01.26 DanC - Incorporated Ben's XBee edits
 ## 2015.01.28 DanC - Further tweaks to pressures, most of CO2
+## 2015.01.29 DanC - CO2 range check, proper append
+
  
+   
 from __future__ import print_function
 
 import time, math, sys, os
@@ -308,8 +311,17 @@ def closeOutRecord():      # DC 11.28
                sensor.clearValues()
            #else:
                #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
+               
+        ## p_sensors = [p_zero, p_whvent, p_fvent, p_zone]
+        elif (sensor.name[0:2] == "p_"): 
+                if  (param.sensor.valve == getCurrentPressureValve()):
+                    sensor.clearValuesExceptLast()
+                else: 
+                    sensor.clearValues()
         else:
-            sensor.clearValuesExceptLast()
+            sensor.clearValues()       
+            
+            
         #print("Sensor Name: {}, Sensor Value(s): {}".format(sensor.name,sensor.values))
     ## clear any non-sensor Params that accumulate
     for param in Lib.params:
@@ -584,7 +596,7 @@ valveco2       = 0
 valveCO2name = "-"
 co2_elapsed    = 0   # Need to initialize to allow inclusion in std out 
 cnt = 0
-lastRecordTime = time.time()
+lastRecordTime = math.trunc(time.time())
 xbeeCaptureList = [NaN,NaN,NaN]
 adcCaptureList = list()
 
@@ -657,37 +669,6 @@ while True:
  
     ## DWC 01.28 TODO CO2 assignment and filtering of values measured during clearance time       
 
-    
-
-    if valveco2 != 0:    ##  CO2 monitoring is active
-        co2_elapsed = scantime - co2starttime   ## Does not need to be repeated later
-        try:
-            ## Generate value of co2filtered, set to NaN during clearance period
-            ## currentCO2value is preserved to allow all CO2 values to show in std out
-            if (co2_elapsed < CO2CLEARTIME):
-                co2filtered = NaN
-            else: 
-                co2filtered = currentCO2value
-    
-            if valveco2 == 4:
-                #print("\nStoring {} into co2_whvent".format(currentCO2value))
-                Lib.co2_whvent.appendAdcValue(co2filtered)
-            elif valveco2 == 5:
-                #print("\nStoring {} into co2_fvent".format(currentCO2value))
-                Lib.co2_fvent.appendAdcValue(co2filtered) 
-            elif valveco2 == 6:
-                #print("\nStoring {} into co2_zone".format(currentCO2value))
-                Lib.co2_zone.appendAdcValue(co2filtered)            
-    
-        except:
-            print("Could not append CO2 values") 
-        
-            
-                    
-    
-
-    
-    
 #################################################################################################################################################################
 #################################################################################################################################################################
 
@@ -704,9 +685,39 @@ while True:
 #################################################################################################################################################################
 #################################################################################################################################################################
 
-    
+    if valveco2 != 0:    ##  CO2 monitoring is active
+        co2_elapsed = scantime - co2starttime   ## Does not need to be repeated later
+        try:
+            ## Generate value of co2filtered, set to NaN during clearance period
+            ## currentCO2value is preserved to allow all CO2 values to show in std out
+            ##  co2_sensors = [co2_whvent, co2_fvent, co2_zone]                      
+                                  
+            if (co2_elapsed < CO2CLEARTIME):
+                co2filtered = NaN
+            else: 
+                co2filtered = currentCO2value
+            """
+            if valveco2 == 4:
+                #print("\nStoring {} into co2_whvent".format(currentCO2value))
+                Lib.co2_whvent.appendAdcValue(co2filtered)
+            elif valveco2 == 5:
+                #print("\nStoring {} into co2_fvent".format(currentCO2value))
+                Lib.co2_fvent.appendAdcValue(co2filtered) 
+            elif valveco2 == 6:
+                #print("\nStoring {} into co2_zone".format(currentCO2value))
+                Lib.co2_zone.appendAdcValue(co2filtered) 
+            """               
+
+            if ((co2filtered != NaN) and (co2filtered > 0.0) and (co2filtered < 10000.0)):
+                Lib.co2_sensors[currentCO2valve - 4].appendValue(co2filtered)
+        except:
+            print("Could not append CO2 values") 
         
+ 
             
+
+                                                        
+                         
                     
     if False: #DEBUG for burner sequencing
         for burner in Lib.burners: ## DEBUG
