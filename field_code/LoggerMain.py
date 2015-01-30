@@ -57,6 +57,7 @@ MULTI_SCAN_REC = 3
 
 # Path for remote rsync
 rsyncPath = "/home/frsa/Data/2445_CS/"
+FREE_BYTES_LIMIT = 1000000 ## cap data capture if Free Bytes remaining is less than this
 
 ###########################################################################################
 ## setup / initialize
@@ -542,12 +543,6 @@ dataFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+B
 ## Generate a Filename and Path (for Info/Diagnostics)
 diagnosticsFilename = Conf.savePath+time.strftime("%Y-%m-%d_%H_%M_%S_",time.gmtime())+BBBsiteName+"_Info.csv"
 
-#Record headers to Data File (for Records)
-dataFile = open(dataFilename,'ab')
-dataFile.write(Lib.record(HEADER_REC)+"\n")
-dataFile.close()
-#TODO Record Units Somewhere.  Where?
-
 ## Record diagnostics information
 diagnosticsFile= open(diagnosticsFilename,'ab')
 BBB_id = Lib.Param(["BBB_ID"],[""],[uniqueID]) #Build any additional items TODO
@@ -561,11 +556,23 @@ Lib.diagParams.extend([BBB_id, BBB_CO_Calibration, BBB_WH_is_present, \
         BBB_F_is_present, BBB_xBeeNodes, BBB_xBeeNodeTypes, BBB_reverseSSHport])
 Lib.diagParams.extend([vbatt_xbee1,vbatt_xbee2,vbatt_xbee3])
 BBB_rsync_save_path = Lib.Param(["rsync_savePath"],["string"],[rsyncPath+BBBsiteName])
-Lib.diagParams.extend([BBB_rsync_save_path])
+freeDiskSpace = get_free_space_bytes(Conf.savePath)
+if freeDiskSpace < FREE_BYTES_LIMIT:     
+    print("Disk is full ({} bytes remaining). Exiting".format(FREE_BYTES_LIMIT))
+    sys.exit()
+BBB_free_space = Lib.Param(["BBB_BytesFree"],["string"])
+BBB_free_space.values = [freeDiskSpace]
+Lib.diagParams.extend([BBB_rsync_save_path,BBB_free_space])
 diagnosticsFile.write(Lib.diag_record(HEADER_REC)+"\n")
 diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
 diagnosticsFile.close()
 lastDiagTime = time.time() - ((time.time() % 86400.0)+1)  ## First instantiation of Diagnostic output and funny math to get next end of day recorded.
+
+#Record headers to Data File (for Records)
+dataFile = open(dataFilename,'ab')
+dataFile.write(Lib.record(HEADER_REC)+"\n")
+dataFile.close()
+#TODO Record Units Somewhere.  Where?
 
 ## determine the current state
 ## DWC 12.14 I don't think we want to fetch here, rather just start scans, and 
@@ -967,6 +974,12 @@ while True:
         and (datetime.utcfromtimestamp(scantime).minute == 0)) or ((scantime - lastDiagTime) >= 129600)): #Daily Diagnostic Record
     #if ((((scantime - lastDiagTime) >= 60.0) and (datetime.utcfromtimestamp(scantime).second == 0)) or ((scantime - lastDiagTime) >= 180.0)): ## DEBUG Interval
         #print("Writing Diagnostics File")
+        # Check free disk space periodically
+        freeDiskSpace = get_free_space_bytes(Conf.savePath)
+        BBB_free_space.values = [freeDiskSpace]
+        if freeDiskSpace < FREE_BYTES_LIMIT:     
+            print("Disk is full ({} bytes remaining). Exiting".format(FREE_BYTES_LIMIT))
+            sys.exit()
         diagnosticsFile= open(diagnosticsFilename,'ab')
         diagnosticsFile.write(Lib.diag_record(SINGLE_SCAN_REC)+"\n")
         diagnosticsFile.close()
@@ -975,7 +988,7 @@ while True:
         for sensor in Lib.sensors:
             #print("Sensor: {}; values: {}".format(sensor.name,sensor.values))
             if isinstance(sensor, Lib.Xbee): 
-               if sensor.adc == "adc-2":  #single out VBAT as do-not-delete
+               if sensor.adc == "adc-1":  #single out VBATT as delete VBATT = adc-1, Sensor=adc-2
                    sensor.clearValues()
                    #print("cleared VBATT values")
     
@@ -1045,12 +1058,6 @@ while True:
         watchdog.flush() 
     except:
         print("unable to write to watchdog")
-    
-    # Check memory periodically? #TODO
-    #freeDiskSpace = get_free_space_bytes(Conf.savePath)
-    #if freeDiskSpace < 1000000:     
-    #    print "Disk is full. Exiting"
-    #    sys.exit()
 
     executiontime = time.time()-scantimeusec
 
@@ -1131,9 +1138,9 @@ while True:
     break
 
 ## cleanup 
-xbee.halt()
-ser.close()
-## TODO add stop pump
+xbee.halt()  # Stop connection to Xbee
+ser.close()  # Close Serial connection (also to Xbee)
+Lib.controls[7].setValue(0)  # stop pumps
 try: 
     dataFile.close()
 except:
