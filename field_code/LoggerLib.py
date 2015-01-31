@@ -24,6 +24,8 @@
 ## 2015-01.28 DanC - Added statistics, stdev, reduced data precision
 ## 2015-01.29 DanC - Added new functions to find stats for 60-sec records inclusive of last value (pressure, CO2)
 ##                 - Added screen for which pressure value is current when closing 60-sec record
+## 2015-01.30 DanC - Renamed some Ains
+
 
 
 from __future__ import print_function
@@ -636,10 +638,17 @@ class CO(Ain):
         self.appendValue(result)
         pass
 
-door1 = Ain("JP1-A@U8", Adc.U8, Adc.MUX0) ## door1 pose
-fan1 = Ain("JP1-B@U8", Adc.U8, Adc.MUX1) ## fan current 1 sensor
-fan2 = Ain("JP1-C@U8", Adc.U8, Adc.MUX2) ## fan current 2 sensor
-co   = CO("JP1-D@U8", Adc.U8, Adc.MUX3) ## CO sensor
+
+#door1 = Ain("JP1-A@U8", Adc.U8, Adc.MUX0) ## door1 pose
+#fan1 = Ain("JP1-B@U8", Adc.U8, Adc.MUX1) ## fan current 1 sensor
+#fan2 = Ain("JP1-C@U8", Adc.U8, Adc.MUX2) ## fan current 2 sensor
+#co   = CO("JP1-D@U8", Adc.U8, Adc.MUX3) ## CO sensor
+## Old names above
+## Try changing names to make them easier to search on later
+door1 = Ain("DOOR-A@U8", Adc.U8, Adc.MUX0) ## door1 pose
+fan1 = Ain("AIN-B@U8", Adc.U8, Adc.MUX1) ## fan current 1 sensor
+fan2 = Ain("AIN-C@U8", Adc.U8, Adc.MUX2) ## fan current 2 sensor
+co   = CO("CO-D@U8", Adc.U8, Adc.MUX3) ## CO sensor
 ains.extend([door1, fan1, fan2, co]) ## remaining ains NOT included: [co2..., niu1, niu2, batt, niu3, niu4, niu5, niu6])
  
 
@@ -665,16 +674,16 @@ class CO2(Ain):
         co2_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
 
     def appendAdcValue(self, value):
-        value = value
+        #value = value
         ## move conversion to fetchAdc, so values are in engr units if used or viewed in loop before append is executed
         #volts = value/1000
         #ppmCO2 = 2000 * volts   ## get this converted to engineering units (PPM)
-        self.appendValue(ppmCO2)
+        self.appendValue(value)
         pass
 
-co2_whvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switched--unique CO2 sensor on same ADC
-co2_fvent = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_fvent) ## valve-switched--unique CO2 sensor on same ADC
-co2_zone  = CO2("J25-1@U9", Adc.U9, Adc.MUX0, CO2.valve_zone) ## valve-switched--unique CO2 sensor on same ADC
+co2_whvent = CO2("J25-1@U9a", Adc.U9, Adc.MUX0, CO2.valve_whvent) ## valve-switched--unique CO2 sensor on same ADC
+co2_fvent = CO2("J25-1@U9b", Adc.U9, Adc.MUX0, CO2.valve_fvent) ## valve-switched--unique CO2 sensor on same ADC
+co2_zone  = CO2("J25-1@U9c", Adc.U9, Adc.MUX0, CO2.valve_zone) ## valve-switched--unique CO2 sensor on same ADC
 co2_sensors = [co2_whvent, co2_fvent, co2_zone]
 ains.extend(co2_sensors)
 
