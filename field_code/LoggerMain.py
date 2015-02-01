@@ -169,7 +169,7 @@ def fetchXbee(data):
                                                 param.setValue(sensor.getLastVal())
 
     except:
-        print ("unable to print or parse xbee data")
+        print("unable to print or parse xbee data")
     pass
 
 
@@ -642,8 +642,9 @@ while True:
     ## Capture time at top of second
     ## DWC 01.24 changed to time.time() because stime() doesn't update after sleep cycle ends
     ## scantimeusec now used for high-resolution timestamp, and scantime for 1-sec resolution
-    scantimeusec = time.time()      
-    Lib.timest.setValue(Lib.TIME(scantimeusec)) # track/record latest timestamp  (Is this used?)
+    scantimeusec = time.time()     
+    ## DWC 02.01 change timest to timestamp
+    Lib.timestamp.setValue(Lib.TIME(scantimeusec)) # track/record latest timestamp  (Is this used?)
     ## DWC create scantimesec (integer seconds) for valve control; fractional seconds throw it off
     scantime = math.trunc(scantimeusec)
     
@@ -741,6 +742,35 @@ while True:
     if False: #DEBUG for burner sequencing
         for burner in Lib.burners: ## DEBUG
             burner.tc.appendAdcValue(random.random() * 200.0) ## added for DBG
+
+    ## DWC 02.01 capture values for use in 60-sec records
+    Lib.whburner_stat.setSavedVal(Lib.whburner_stat.values)
+    Lib.whburner_mode.setSavedVal(Lib.whburner_mode.values)
+    Lib.fburner_stat.setSavedVal(Lib.fburner_stat.values)
+    Lib.fburner_mode.setSavedVal(Lib.fburner_mode.values)
+    Lib.monitor.setSavedVal(Lib.monitor.values)
+    #Lib..setSavedVal(self, passed_value)
+
+
+    # def setSavedVal(self, passed_value):
+    # SET timestamp = Param(["time"], ["UTC"], [TIME(Timer.stime())])
+    # OK recnum = Param(["rec_num"],["integer"],[0])
+    
+    # SET whburner_stat = Param(["wh_status"],["integer"],[DEC(NaN)])
+    # SET whburner_mode = Param(["wh_mode"],["integer"],[DEC(NaN)]) 
+    # SET fburner_stat = Param(["f_status"],["integer"],[DEC(NaN)]) 
+    # SET fburner_mode = Param(["f_mode"],["integer"],[DEC(NaN)])
+    # SET monitor = Param(["sys_state"],["integer"],[DEC(NaN)])
+    #params.extend([whburner_stat,whburner_mode,fburner_stat, fburner_mode, monitor])
+
+    #scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
+    #sec_whrun = Param(["sec_whrun"],["integer"],[0]) # total accumulated run time, but output zero at end of 60-sec records
+    #sec_frun = Param(["sec_frun"],["integer"],[0]) # total accumulated run time, but always value of zero at end of 60sec recs
+    #sec_whcooldown = Param(["sec_whcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+    #sec_fcooldown = Param(["sec_fcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+    #sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages over the record period. # of secs since last rec
+    #params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
+            
 
     ## Process data
     ## Determine status of both burners
@@ -983,7 +1013,7 @@ while True:
         Lib.controls[7].setValue(0)     ## Pump
 
     if False:         ## TEST PRINT
-        print ("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
+        print("valveindexpress = {} valvepress = {} press_elapsed = {} valveindexco2 = {} valveco2 = {} co2_elapsed = {}"\
             .format(valveindexpress, valvepress, press_elapsed, valveindexco2, valveco2, co2_elapsed))   
  
     
@@ -1140,7 +1170,7 @@ while True:
 
     print("{:1d}{:1d}{:1d} {:1d}{:1d}{:1d}".format(wh.status, whmode, wh.prevMode, f.status, fmode, f.prevMode), end='')
     print(" {:1d}{:1d}".format(mon.state, mon.prevState), end='')
-    print (" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
+    print(" {:>4.2f}".format(round(Decimal(executiontime),3)), end='')
 
     ## DWC 01.24 insert CO2 valve info (valve name for last value, new valve #, time on new valve
     print("{:s}{:02d} {:4.0f} ".format(valveCO2name, co2_elapsed, currentCO2value), end='') # *** TODO  integer formatting of output 

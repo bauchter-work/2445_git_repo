@@ -42,6 +42,10 @@ import LoggerConfig as Conf
 ######################################################
 ## buses, chips and protocols
 
+## DWC 02.01 moved up from below
+def DEC(number):
+    return Decimal(number) #"{:d}".format(number)
+
 class I2c(object):
     """includes all I2C(SMBus)-attached objects"""
 
@@ -403,7 +407,7 @@ class Sensor(object):
         self.name = name
         #self.values = collections.deque()
         self.values = list() ## https://docs.python.org/2/library/stdtypes.html#typesseq-mutable 
-        self.currentVal = 1.234
+        self.currentVal = DEC(-77)
         pass
 
     ## DWC 01.26 add a mechanism for capturing current value without appending to list
@@ -1084,6 +1088,7 @@ class Param(object):
         self.headers = headers
         self.units = units
         self.values = values
+        self.savedValue = [DEC(-99)]  ## List because it must be iterable in record()
 
     def reportHeaders(self):
         return self.headers
@@ -1097,6 +1102,17 @@ class Param(object):
     def reportStatData(self): ## len must match headers and units
         return self.values
 
+    def reportSavedStatData(self): ## len must match headers and units
+        return self.savedValue
+
+    ## DWC 0201 new functions to save timestamp for start of record, and state from prior scan
+    def setSavedVal(self, passed_value):
+        self.savedValue = passed_value
+        
+    ## Not sure we need this, may just use reportSavedStatData()  
+    ## Returns a list, because it must be iterable later in record()
+    def getSavedVal(self):
+        return [self.savedValue]       
 
     ## DWC 01.25 Is this append correct?  <= 0 looks funny
     ## It appears to be used in record setup: param.setValue(fields[0]+1)
@@ -1107,14 +1123,11 @@ class Param(object):
             self.values[0] = value
  
 siteid = Param(["site"], [""], [Conf.siteName])
-timest = Param(["time"], ["UTC"], [TIME(Timer.stime())])
+timestamp = Param(["time"], ["UTC"], [TIME(Timer.stime())])  ## DWC 02.01 changed name from timest
 recnum = Param(["rec_num"],["integer"],[0])
 
-params = [siteid, timest, recnum] ## alnum, utc, int
-diagParams = [timest,siteid] ## set for diagnostic file's parameters
-
-def DEC(number):
-    return Decimal(number) #"{:d}".format(number)
+params = [siteid, timestamp, recnum] ## alnum, utc, int
+diagParams = [timestamp,siteid] ## set for diagnostic file's parameters
 
 class SampledParam(Param):
     """includes all sensed/sampled parameters to be reported"""
@@ -1267,11 +1280,12 @@ fventpress = PressureParam("fvent", p_fvent)
 zonepress = PressureParam("zone", p_zone)
 params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
 
-whburner_stat = Param(["wh_status"],["integer"],[DEC(NaN)])
-whburner_mode = Param(["wh_mode"],["integer"],[DEC(NaN)]) 
-fburner_stat = Param(["f_status"],["integer"],[DEC(NaN)]) 
-fburner_mode = Param(["f_mode"],["integer"],[DEC(NaN)])
-monitor = Param(["sys_state"],["integer"],[DEC(NaN)])
+## DWC 02.01 intitialize to default values, rather than DEC(NaN)
+whburner_stat = Param(["wh_status"],["integer"],[DEC(0)])
+whburner_mode = Param(["wh_mode"],["integer"],[DEC(5)]) 
+fburner_stat = Param(["f_status"],["integer"],[DEC(0)]) 
+fburner_mode = Param(["f_mode"],["integer"],[DEC(5)])
+monitor = Param(["sys_state"],["integer"],[DEC(6)])
 params.extend([whburner_stat,whburner_mode,fburner_stat, fburner_mode, monitor])
 
 scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
@@ -1281,6 +1295,7 @@ sec_whcooldown = Param(["sec_whcool"],["integer"],[0]) # accumulated cool time, 
 sec_fcooldown = Param(["sec_fcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
 sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages over the record period. # of secs since last rec
 params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])
+
 
 class XbeeParam(SampledParam):
     def __init__(self, loc, sensor):
@@ -1334,11 +1349,7 @@ def record(recType):
             ## 0131A DWC need temp variable to get headers for further evaluation?  Should be able to use param
             fields = param.reportStatData()
             ## Capture time stamp from start of record
-            #if param.reportHeaders() == ['rec_num']:   TIMESTAMP
-            #    #print("prev_recnum is:{}".format(fields[0]))
-            #    param.setValue(fields[0]+1)
-            #    #print("new recnum value:{}".format(param.reportScanData()))
-            #*****  ##  0131A Can't ref fields here - added fields back above
+            #  0131A Can't ref fields here - added fields back above
             if param.reportHeaders() == ['rec_num']:
                 #print("prev_recnum is:{}".format(fields[0]))
                 param.setValue(fields[0]+1)
@@ -1351,14 +1362,58 @@ def record(recType):
                     fields = param.reportStatData()
                 else: 
                     fields = param.reportStatDataInclusive()
-            elif param.reportHeaders()[0][0:2] == "**":
-                pass
+                    ## **** Edit to call param.reportStatDataInclusive() for CO2
+                    ## **** be sure to clearAll CO2 data
+            elif (param.reportHeaders()[0][0:12] == "XXXXXXXXXXXXXXXX"):
+                fields = param.reportStatDataInclusive()
+            elif (param.reportHeaders()[0][0:4] == "time"):    ## reportSavedStatData()
+                fields = param.reportSavedStatData()
+            elif (param.reportHeaders()[0][0:9] == "wh_status"):
+                fields = param.reportSavedStatData()
+                print("wh_status:  {}  " .format(whburner_stat), end='')
+            elif (param.reportHeaders()[0][0:7] == "wh_mode"):
+                fields = param.reportSavedStatData()
+                print("wh_mode  {} " .format(whburner_mode), end='')
+            elif (param.reportHeaders()[0][0:8] == "f_status"):
+                fields = param.reportSavedStatData()
+                print("f_status  {} " .format(fburner_stat), end='')
+            elif (param.reportHeaders()[0][0:6] == "f_mode"):
+                fields = param.reportSavedStatData()
+                print("f_mode  {} " .format(fburner_mode), end='')
+            elif (param.reportHeaders()[0][0:9] == "sys_state"):
+                fields = param.reportSavedStatData()
+                print("sys_state  {} " .format(monitor), end='')
+            elif (param.reportHeaders()[0][0:2] == "WXYZ"):
+                fields = param.reportSavedStatData()
+                print("WXYZ  {} " .format(monitor), end='')
+            elif (param.reportHeaders()[0][0:2] == "ABCD"):
+                fields = param.reportSavedStatData()
+                print("ABCD  {} " .format(monitor), end='')
+            
+
+                # def setSavedVal(self, passed_value):
+                # SET timestamp = Param(["time"], ["UTC"], [TIME(Timer.stime())])
+                # OK recnum = Param(["rec_num"],["integer"],[0])
+                
+                # SET whburner_stat = Param(["wh_status"],["integer"],[DEC(NaN)])
+                # SET whburner_mode = Param(["wh_mode"],["integer"],[DEC(NaN)]) 
+                # SET fburner_stat = Param(["f_status"],["integer"],[DEC(NaN)]) 
+                # SET fburner_mode = Param(["f_mode"],["integer"],[DEC(NaN)])
+                # SET monitor = Param(["sys_state"],["integer"],[DEC(NaN)])
+                #params.extend([whburner_stat,whburner_mode,fburner_stat, fburner_mode, monitor])
+
+                #scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
+                #sec_whrun = Param(["sec_whrun"],["integer"],[0]) # total accumulated run time, but output zero at end of 60-sec records
+                #sec_frun = Param(["sec_frun"],["integer"],[0]) # total accumulated run time, but always value of zero at end of 60sec recs
+                #sec_whcooldown = Param(["sec_whcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+                #sec_fcooldown = Param(["sec_fcool"],["integer"],[0]) # accumulated cool time, set to 0 when in state 5 or 6
+                #sec_count = Param(["sec_count"],["integer"],[1]) # divisor to calculate averages over the record period. # of secs since last rec
+                #params.extend([scans_accum, sec_whrun, sec_frun, sec_whcooldown, sec_fcooldown, sec_count])                                                        
             else:
                 ## DWC 01.31 this not needed; override above as needed
                 fields = param.reportStatData() 
                 pass   
             #print("Fields before:{}".format(fields))
-            ## Increment record number integer
             for field in fields: ## convert precisions  ## TODO is this for loop needed, since we're already cycling through params?
                 #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
                 if param.reportHeaders()[0][0:2] == 't_':  #if temps
