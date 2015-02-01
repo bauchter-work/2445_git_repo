@@ -24,12 +24,11 @@
 ## 2015-01.28 DanC - Added statistics, stdev, reduced data precision
 ## 2015-01.29 DanC - Added new functions to find stats for 60-sec records inclusive of last value (pressure, CO2)
 ##                 - Added screen for which pressure value is current when closing 60-sec record
-## 2015-01.30 DanC - Renamed some Ains
-
+## 2015-01.30 DanC - Renamed some Ains, commented some unused fcns
+## 2015-01.30 DanC - Record fields 
 
 
 from __future__ import print_function
-
 import math, signal, time, gc
 from datetime import datetime
 import numbers
@@ -665,13 +664,14 @@ class CO2(Ain):
         self.valve = valve
         pass
 
-    def setValves(self):
-        ## sets all valves as appropriate for sampling this co2 sensor's nominal location
-        ## --should be called as early as possible before the adc
-        for valve in range(len(co2_valves)): ##[CO2.valve_whvent, CO2.valve_fvent, CO2.valve_zone]: ## set the valves per the ctor arg
-            co2_valves[valve].setValue(valve == self.valve)
-        co2_valve_pos.setValue(self.valve) ## set the ad hoc param value for reporting valve position
-        co2_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
+    ## Not used
+    #def setValves(self):
+    #    ## sets all valves as appropriate for sampling this co2 sensor's nominal location
+    #    ## --should be called as early as possible before the adc
+    #    for valve in range(len(co2_valves)): ##[CO2.valve_whvent, CO2.valve_fvent, CO2.valve_zone]: ## set the valves per the ctor arg
+    #        co2_valves[valve].setValue(valve == self.valve)
+    #    co2_valve_pos.setValue(self.valve) ## set the ad hoc param value for reporting valve position
+    #    co2_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
 
     def appendAdcValue(self, value):
         #value = value
@@ -713,14 +713,15 @@ class Dlvr(I2c, Sensor):
         Sensor.__init__(self, name)
         self.valve = valve
         pass
-
-    def setValves(self):
-        ## sets all valves as appropriate for sampling this pressure sensor's nominal location
-        ## --should be called as early as possible before the reading?
-        for valve in range(len(p_valves)): ##[Dlvr.valve_zero, Dlvr.valve_whvent, Dlvr.valve_fvent, Dlvr.valve_zone]: ## set the valves per the ctor arg
-            p_valves[valve].setValue(valve == self.valve)
-        p_valve_pos.setValue(self.valve) ## set the ad hoc param value for reporting valve position
-        p_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
+    
+    ## not used
+    #def setValves(self):
+    #    ## sets all valves as appropriate for sampling this pressure sensor's nominal location
+    #    ## --should be called as early as possible before the reading?
+    #    for valve in range(len(p_valves)): ##[Dlvr.valve_zero, Dlvr.valve_whvent, Dlvr.valve_fvent, Dlvr.valve_zone]: ## set the valves per the ctor arg
+    #        p_valves[valve].setValue(valve == self.valve)
+    #    p_valve_pos.setValue(self.valve) ## set the ad hoc param value for reporting valve position
+    #    p_valve_time.setValue(now()) ## set the ad hoc param value for reporting valve open time--TODO should be elapsed time
 
     def readPressure(self):
         Response = self.readList(reg=0,length=4)
@@ -1330,58 +1331,34 @@ def record(recType):
                     trimmedFields.append(field)
             fields = list(trimmedFields) # replace with trimmed values
         elif (recType == MultiScanRec):
+            ## 0131A DWC need temp variable to get headers for further evaluation?  Should be able to use param
+            fields = param.reportStatData()
+            ## Capture time stamp from start of record
+            #if param.reportHeaders() == ['rec_num']:   TIMESTAMP
+            #    #print("prev_recnum is:{}".format(fields[0]))
+            #    param.setValue(fields[0]+1)
+            #    #print("new recnum value:{}".format(param.reportScanData()))
+            #*****  ##  0131A Can't ref fields here - added fields back above
+            if param.reportHeaders() == ['rec_num']:
+                #print("prev_recnum is:{}".format(fields[0]))
+                param.setValue(fields[0]+1)
+                #recnum.setValue(tempfield[0]+1)
+                #print("new recnum value:{}".format(param.reportScanData()))
             
-            
-            """
-            p_sensors = [p_zero, p_whvent, p_fvent, p_zone]    
-            params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
-                
-            """  
-
+            ## does getCurrentPressureValve() work?
             if param.reportHeaders()[0][0:2] == "p_": 
                 if  (param.sensor.valve == getCurrentPressureValve()):
                     fields = param.reportStatData()
                 else: 
                     fields = param.reportStatDataInclusive()
-
-            """
-            try:   
-                if param.reportHeaders()[0][0:2] == 'p_': 
-                    print("Valve Number for Current param:  {:d} ".format (param.sensor.valve))
-            except:
-                print("stuck at Valve Number for Current param")
-                                                                                                         
-            try:
-                if param.reportHeaders()[0][0:2] == 'p_': 
-                    if (param.sensor.valve == 2):
-                        print("intial success")
-            except:
-                print("stuck at intial success")                                                                                                          
- 
-            try:
-                if (param.reportHeaders()[0][0:2] == 'p_'): 
-                    print(param.sensor.getLastVal())
-                    # doesnt work: print("Sensor for current param: {:s} ".format (param.sensor))
-            except:
-                print("stuck at getLastVal()")
-
-            try:
-                if param.reportHeaders()[0][0:2] == 'p_': 
-                    if  (param.sensor.valve == getCurrentPressureValve()):
-                        print(param.sensor.getLastVal())
-                    # doesnt work: print("Sensor for current param: {:s} ".format (param.sensor))
-            except:
-                print("stuck at param.sensor.valve == getCurrentPressureValve()")
-            """   
-                               
-                                                             
-            fields = param.reportStatData()    
+            elif param.reportHeaders()[0][0:2] == "**":
+                pass
+            else:
+                ## DWC 01.31 this not needed; override above as needed
+                fields = param.reportStatData() 
+                pass   
             #print("Fields before:{}".format(fields))
             ## Increment record number integer
-            if param.reportHeaders() == ['rec_num']:
-                #print("prev_recnum is:{}".format(fields[0]))
-                param.setValue(fields[0]+1)
-                #print("new recnum value:{}".format(param.reportScanData()))
             for field in fields: ## convert precisions  ## TODO is this for loop needed, since we're already cycling through params?
                 #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
                 if param.reportHeaders()[0][0:2] == 't_':  #if temps

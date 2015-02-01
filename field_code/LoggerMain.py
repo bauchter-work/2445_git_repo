@@ -28,7 +28,7 @@
 ## 2015.01.26 DanC - Incorporated Ben's XBee edits
 ## 2015.01.28 DanC - Further tweaks to pressures, most of CO2
 ## 2015.01.29 DanC - CO2 range check, proper append
-## 2015.01.31 DanC - CO2 & pressure accumulation fixed 
+## 2015.01.31 DanC - CO2 & pressure accumulation fixed incl currrent valve and start times
  
    
 from __future__ import print_function
@@ -305,19 +305,6 @@ def fetchPressure():
     return pressureAvg # returns oversampled pressure reading in inH20
     pass
 
-# DC 11.28 New functions for building and writing records
-
-#def accumulateValues():       # DC 11.28 
-#    for sensor in Lib.sensors:
-#        sensor.value.sum(sensor.currentvalue)  # Add current val to running sum
-#        sensor.value.min(sensor.currentvalue)  # Compare current val to running min
-#        sensor.value.max(sensor.currentvalue)  # Compare curr ent val to running max
-#        sensor.value.count(sensor.currentvalue) # Track number of values for avg calc 
-#        # OR, accumulate values over the ~60 sec period, 
-#        #  and do the arithmetic at end of period:
-#        #sensor.appendAdcValue(sensor.currentvalue) 
-#    pass
-
 
 def closeOutRecord():      # DC 11.28 
     # Number of samples = sensorX.count where sensorX is e.g. TC01
@@ -346,14 +333,16 @@ def closeOutRecord():      # DC 11.28
            #else:
                #print("Did not clear values for {} {}".format(sensor.name,sensor.adc))
                
-        ## p_sensors = [p_zero, p_whvent, p_fvent, p_zone]
+        ## Preserve last value only for most recently updated pressure value (note this may still clear
+        ##   a value from a previous second if the current second scan resulted in NaN and thus was not appended)
+        ## Similar logic for CO2 should not be needed (since we only work w/ accumulated CO2 vals for one minute at a time)
         elif (sensor.name[0:2] == "p_"): 
                 if  (param.sensor.valve == getCurrentPressureValve()):
                     sensor.clearValuesExceptLast()
                 else: 
                     sensor.clearValues()
         else:
-            sensor.clearValues()       
+            sensor.clearValuesExceptLast()       
             
             
         #print("Sensor Name: {}, Sensor Value(s): {}".format(sensor.name,sensor.values))
@@ -674,7 +663,9 @@ while True:
     currentpressurevalve = valvepress
     Lib.setCurrentPressureValve(valvepress)
     press_elapsed = scantime - pressstarttime
-
+    Lib.p_valve_pos.setValue(valvepress)
+    Lib.p_valve_time.setValue(press_elapsed)
+  
     try:
         ## Set current value (including zero offset) to NaN during clearance period
         if (press_elapsed < 2):
@@ -688,14 +679,15 @@ while True:
                 currentpressure = (currentpressure - zeroOffset)  ## Apply zero offset to stick through end of scan incl std out
         ## Update values INCLUDING writing NaN to p_zero  
         ## DWC 01.28 I don't think we're using this at all, since we're appending currentpressure to p_sensors below
-        if currentpressurevalve == 0:
-            Lib.p_zero.setCurrentVal(currentpressure)
-        elif currentpressurevalve == 1:
-            Lib.p_whvent.setCurrentVal(currentpressure)
-        elif currentpressurevalve == 2:
-            Lib.p_fvent.setCurrentVal(currentpressure)
-        elif currentpressurevalve == 3:
-            Lib.p_zone.setCurrentVal(currentpressure)    
+        # ****  commented OK?
+        #if currentpressurevalve == 0:
+        #    Lib.p_zero.setCurrentVal(currentpressure)
+        #elif currentpressurevalve == 1:
+        #    Lib.p_whvent.setCurrentVal(currentpressure)
+        #elif currentpressurevalve == 2:
+        #    Lib.p_fvent.setCurrentVal(currentpressure)
+        #elif currentpressurevalve == 3:
+        #    Lib.p_zone.setCurrentVal(currentpressure)    
     except:
         print("could not set current pressure value") 
     if False:
@@ -895,9 +887,12 @@ while True:
 
     
     ## CO2 control routine
-    
     ## For use below: waterHeaterIsPresent furnaceIsPresent    
 
+    ## Moved up from below:
+    Lib.co2_valve_pos.setValue(int(valveco2)) ## set initial value of Parameter "loc_co2"
+    Lib.co2_valve_time.setValue(co2_elapsed)
+    
     ## CO2 valve control 
     ## initial valve setting    
     if (mon.getprevState() in [4,6]):    ## States w/ no CO2 monitoring
@@ -912,7 +907,9 @@ while True:
             else: 
                 valveco2 = 5  #start at furnace if no water heater present
         co2starttime = scantime
-        Lib.co2_valve_pos.setValue(int(valveco2)) ## set initial value of Parameter "loc_co2"
+        
+        ## DWC 01.31 move up to capture position BEFORE setting, since it's used to determine valve associated with current data
+        #Lib.co2_valve_pos.setValue(int(valveco2)) ## set initial value of Parameter "loc_co2"
      
     ## Valve cycling 
     ## set up initialization of valve list to reflect presence of wh and/or furn
@@ -928,7 +925,7 @@ while True:
         # co2_elapsed = scantime - co2starttime  # Done earlier
         if (((co2_elapsed) >= CO2VALVECYCLE) or ((co2_elapsed) < 0)):
             try:
-                ## DWC 01.28 moved append up, and out of this conditional loop, which only saved one val per cycle
+                ## DWC 01.28 moved append up, and out of this conditional loop, which only saved one value per cycle
                 """
                 ## first store the fetched pressure for the previous valve setting
                 if valveco2 == 4:
@@ -948,8 +945,9 @@ while True:
                     valveindexco2 = 0
                 valveco2 = valvelistco2[valveindexco2]  
                 co2starttime = scantime
-                Lib.co2_valve_time.setValue(int(0)) ## reset time elapsed
-                Lib.co2_valve_pos.setValue(int(valveco2)) ## update present valve setting
+                ## DWC 01.31 move up to capture time BEFORE re-setting, since it's used to determine valve time associated with current data 
+                #Lib.co2_valve_time.setValue(int(0)) ## reset time elapsed
+                #Lib.co2_valve_pos.setValue(int(valveco2)) ## update present valve setting
                 print("CO2 valve indexing. Elapsed = {}"\
                 .format (scantime-co2starttime))
             except:
@@ -1012,7 +1010,13 @@ while True:
                if sensor.adc == "adc-1":  #single out VBATT as delete VBATT = adc-1, Sensor=adc-2
                    sensor.clearValues()
                    #print("cleared VBATT values")
+  
     
+    ## DWC 01.31 Test all parameters
+    #for param in Lib.params:
+    #    print("{:s}  {} ".format(param.headers, param.values ))
+    
+         
 
     # Define 2 lists for state tests:
     prev_state_60sec   = [5,6]      # Monitoring states with 60-sec record interval
@@ -1109,19 +1113,18 @@ while True:
                     
     #print("adcCaptureList: {}".format(adcCaptureList))  ## DEBUG
     for item in adcCaptureList: 
-        print("{:4.1f} ".format(item[1]), end='') 
+        #print("{:4.1f} ".format(item[1]), end='') 
         ## [0] us proper reference to name
         ## Look at sensor name to determine resolution
-        # if param.reportHeaders()[0][0:2] == 't_':  #if temps
-        #try:
-        #    if (item[0][0:4] == 'DOOR'):
-        #        print("{:5d} " .format(item[1]), end='')
-        #    elif (item[0][0:3] == 'AIN'):
-        #        print("{:5.2f} " .format(item[1]), end='')
-        #    else:
-        #        print("{:4.0f}" .format(item[1]), end='')
-        #except:
-        #    print("in print adcCaptureList")
+        if item[0][0:2] == 't_':  #if temps
+            print("{:4.0f} " .format(item[1]), end='')
+        elif (item[0][0:4] == 'DOOR'):
+            print("{:4.0f} " .format(item[1]), end='')
+        elif (item[0][0:3] == 'AIN'):
+            print("{:5.2f} " .format(item[1]), end='')
+        else:
+            print("{:4.0f}" .format(item[1]), end='')
+        #print("in print adcCaptureList")
     #print()    
     adcCaptureList = list() # empty list
 
@@ -1147,27 +1150,26 @@ while True:
     
     ## Check pressure values
     ## THIS MAKES FOR A COOL CUMULATIVE PRINT OF PRESSURES AS THEY ACCUMULATE OVER A 60-SEC PERIOD 
-    #"""
-    for a in [0,1,2,3]:
-        print("PressVlv: {:d} " .format(Lib.p_sensors[a].valve),end='')
-        print("Len: {:d} ".format(len(Lib.p_sensors[a].values)),end='')
-        ##print("{:d} ".format(len(pressure_item.values)))
-        for x in range (len(Lib.p_sensors[a].values)):
-            print("{:8.2f}" .format(Lib.p_sensors[a].values[x]),end='' )
-        print()
-
-    ## Similarly for CO2
-    try: 
-        #co2_sensors = [co2_whvent, co2_fvent, co2_zone]
-        for a in [0,1,2]:   ## Note a are indices to the sensors in co2_sensors, not actual valve numbers
-            print("CO2__Vlv: {:d} " .format(Lib.co2_sensors[a].valve),end='')
-            print("Len: {:d} ".format(len(Lib.co2_sensors[a].values)),end='')
-            ##print("{:d} ".format(len(pressure_item.values)))
-            for x in range (len(Lib.co2_sensors[a].values)):
-                print("{:8.2f}" .format(Lib.co2_sensors[a].values[x]),end='' )
-            print("")
-    except:
-        print("stopped at print of accumulated co2 values")
+#    for a in [0,1,2,3]:
+#        print("PressVlv: {:d} " .format(Lib.p_sensors[a].valve),end='')
+#        print("Len: {:d} ".format(len(Lib.p_sensors[a].values)),end='')
+#        ##print("{:d} ".format(len(pressure_item.values)))
+#        for x in range (len(Lib.p_sensors[a].values)):
+#            print("{:8.2f}" .format(Lib.p_sensors[a].values[x]),end='' )
+#        print()
+#
+#    ## Similarly for CO2
+#    try: 
+#        #co2_sensors = [co2_whvent, co2_fvent, co2_zone]
+#        for a in [0,1,2]:   ## Note a are indices to the sensors in co2_sensors, not actual valve numbers
+#            print("CO2__Vlv: {:d} " .format(Lib.co2_sensors[a].valve),end='')
+#            print("Len: {:d} ".format(len(Lib.co2_sensors[a].values)),end='')
+#            ##print("{:d} ".format(len(pressure_item.values)))
+#            for x in range (len(Lib.co2_sensors[a].values)):
+#                print("{:8.2f}" .format(Lib.co2_sensors[a].values[x]),end='' )
+#            print("")
+#    except:
+#        print("stopped at print of accumulated co2 values")
        
             
                     
