@@ -26,6 +26,11 @@
 ##                 - Added screen for which pressure value is current when closing 60-sec record
 ## 2015-01.30 DanC - Renamed some Ains, commented some unused fcns
 ## 2015-01.30 DanC - Record fields 
+## 2015.02.01 DanC - Record values of status, modes, state
+## 2015.02.02 DanC - Dropped attempts to capture status values from prior scan.  Fixed stddev. 
+##                 - Edited burner rules. 
+## 2015.02.03 DanC - Pressure single scan values, run time, burner rules
+
 
 
 from __future__ import print_function
@@ -36,7 +41,7 @@ from decimal import * ## https://docs.python.org/2/library/decimal.html
 from smbus import SMBus
 import Adafruit_BBIO.GPIO as GPIO
 import LoggerConfig as Conf
-# from statistics import stdev
+from statistics import stdev
 
 
 ######################################################
@@ -456,7 +461,7 @@ class Sensor(object):
                 clippedValues.append(item)
             clippedValues.pop() #drop the last item
             return math.fsum(clippedValues)/len(clippedValues)
-
+            
     ## DWC 01.29 Alternative versions of stat functions that include last value captured            
     def getAvgValInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
         if len(self.values) <= 0:
@@ -503,38 +508,32 @@ class Sensor(object):
     ## DWC 01.28 implement stdev, carried through to SampledParam
     ## DWC 01.28 Not working, temporarily replace stdev with min 
     def getStdDev(self):  ## NOTE EXCLUDES LAST VALUE CAPTURED
-        try:
-            if len(self.values) <= 2:
-                return NaN
-            else:
-                clippedValues = list()
-                for item in self.values:
-                    clippedValues.append(item)
-                clippedValues.pop() #drop the last item
-                ss = 0
-                for x in (clippedValues):
-                    ss = ss + x^2
-                standard_dev = math.sqrt(ss/len(clippedValues))
-                return standard_dev
-        except:
-            print("stdev error")
+        if len(self.values) <= 2:
             return NaN
-            
+        else:
+            clippedValues = list()
+            for item in self.values:
+                clippedValues.append(item)
+            clippedValues.pop() #drop the last item
+            #ss = 0
+            #mean = 2
+            #for x in (clippedValues):
+            #    ss = ss + x**2.0   ## cast as float?
+            #standard_dev = math.sqrt(ss/len(clippedValues))
+            return stdev(clippedValues)
+        #print("stdev exclusive error")            
 
     def getStdDevInclusive(self):  ## NOTE INCLUDES LAST VALUE CAPTURED
-        try:
-            if len(self.values) <= 2:
-                return NaN
-            else:
-                ss = 0
-                for x in (self.values):
-                    ss = ss + x^2
-                standard_dev = math.sqrt(ss/len(clippedValues))
-                return standard_dev
-        except:
-            print("stdev error")
-            return NaN    
-
+        if len(self.values) <= 2:
+            return NaN
+        else:
+            #ss = 0
+            #for x in (self.values):
+            #    ss = ss + x**2.0   ## cast as float?
+            #standard_dev = stdev(self.values)
+            return stdev(self.values)
+        #print("stdev inclusive error")
+        
 sensors = []
 
 class Ain(Sensor):
@@ -626,7 +625,7 @@ ains.extend(tcs)
 
 class CO(Ain):
     """includes all (ADC-attached) CO sensor inputs"""
-    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS, co_calib_value=1658):
+    def __init__(self, name, adcIndex, mux, pga=PGA, sps=SPS, co_calib_value=1700):
         Ain.__init__(self, name, adcIndex, mux, pga=PGA, sps=SPS)
         try:
             self.co_calib_value = Conf.co_calib_value  #try to base it off Configuration File first
@@ -899,9 +898,6 @@ class Burner(object):
     Mode4Cooling = 4
     Mode5Off = 5
 
-    T_WHFLUEMIN = 120 ## F
-    T_FFLUEMIN = 120 ## F
-
     STATUS_ON = True
     STATUS_OFF = False
 
@@ -921,32 +917,48 @@ class Burner(object):
         pass
 
     def calcStatus(self):
+        ## **** EDIT VALUES BEFORE FIELD DEPLOYMENT
+        T_ON_THRESHOLD = 100       ## Set to 190 F
+        T_OFF_DEADBAND =  25       ## Keep at 30 F  ## Keep these as set in each burnere intialization 
+        #DT_TURN_ON     =   5       ## Set to 8F?
+        #DT_TURN_OFF    =  -5       ## Keep at -5F ?
+        DT_STAY_ON     =  10       ## Temp rise rate to confirm On status - should be a pretty high bar
+        DT_STAY_OFF    = -10       ## Temp drop rate to confirm Off status - should be a pretty high bar
+
+        #T_ON_THRESHOLD = 190       ## Set to 190 F
+        #T_OFF_DEADBAND =  30       ## Keep at 30 F  ## Keep these as set in each burnere intialization 
+        ##DT_TURN_ON     =   5       ## Set to 8F?
+        ##DT_TURN_OFF    =  -5       ## Keep at -5F ?
+        #DT_STAY_ON     =  10       ## Temp rise rate to confirm On status - should be a pretty high bar
+        #DT_STAY_OFF    = -10       ## Temp drop rate to confirm Off status - should be a pretty high bar
         self.prevStatus = self.status
         last = self.tc.getLastVal()
         if (last != NaN):
             avg = self.tc.getMovAvg()
-            if ((last - avg) > self.dtOn):
-                self.status = Burner.STATUS_ON
-            elif ((last - avg) < self.dtOff):
-                self.status = Burner.STATUS_OFF
+            if (self.prevStatus == self.STATUS_OFF):       ## Previous status is OFF   
+                if ((last - avg) <  DT_STAY_OFF):     ## Steep temp decline, prevents considering absolute temp
+                    self.status = Burner.STATUS_OFF    
+                elif ((last - avg) > self.dtOn):
+                    self.status = Burner.STATUS_ON
+                elif (avg > T_ON_THRESHOLD):          ## Absolute temp test
+                     self.status = Burner.STATUS_ON
+                else:
+                    pass    ## Hold status OFF 
+            else:                            ## Previous status is ON
+                if ((last - avg) >  DT_STAY_ON):       ## Steep temp rise, prevents considering absolute temp as long as temp is in steep rise
+                    self.status = Burner.STATUS_ON
+                elif ((last - avg) < self.dtOff):
+                    self.status = Burner.STATUS_OFF
+                elif (avg < (T_ON_THRESHOLD - T_OFF_DEADBAND)):    ## Absolute temp test
+                     self.status = Burner.STATUS_OFF
+                else:
+                    pass    ## Hold status ON 
             #else no change
         return self.status
 
     def getStatus(self):
         return self.status
 
-    """    
-    ## DWC 12.14 not used - incorporated below
-    def iscooling(self):      
-        cooling = False
-        if (self.stopTime is not None):
-            coolTime = self.stopTime + 180.0 ## plus 3 minutes...
-            coolDateTime = datetime.utcfromtimestamp(coolTime)
-            coolTime -= (coolDateTime.second + (coolDateTime.microsecond / 1000000.0)) ## ...then back up to top of the minute
-            cooling = True if (time.time() < coolTime) else False
-        return cooling
-        pass
-    """
     ## DWC 12.14 Major revision
     def calcMode(self):
         """N.B. this method also sets the stopTime which is used in the calculation--must be called once and only once every tick"""
@@ -954,52 +966,62 @@ class Burner(object):
         if (self.isPresent):
             self.prevMode = self.mode     ## Moved up from end
             self.calcStatus() ## update status
-            self.timeOn = 0.0  ## set in mode calcs as needed
+            self.timeOn = 0  ## set in mode calcs as needed.  02.03 set as integer, not 0.0
+            self.timeCooling = 0
             ## DWC 12.14 drop: self.mode = Burner.Mode2On if (self.status == Burner.STATUS_ON) else Burner.Mode5Off
             ## DWC 12.14 don't think we need this if values are intialized:
             #if (self.prevMode is not None):
             if (self.prevMode == Burner.Mode1JustStarted):
                 if (self.status == Burner.STATUS_ON):
                     self.mode = Burner.Mode2On
-                    self.timeOn = now() - self.startTime
+                    self.timeOn = math.trunc(now()) - self.startTime #use now()??
                 else:
                     self.mode = Burner.Mode4Cooling
                     ## unexpected--register an error
-                    self.stopTime = now()
+                    self.stopTime = math.trunc(now())
             elif (self.prevMode == Burner.Mode2On):
                 if (self.status == Burner.STATUS_OFF):
                     self.mode = Burner.Mode3JustStopped
-                    self.timeOn = now() - self.startTime
-                    self.stopTime = now()
+                    self.timeOn = math.trunc(now()) - self.startTime
+                    self.stopTime = math.trunc(now())
                 else:
-                    self.timeOn = now() - self.startTime
+                    self.timeOn = math.trunc(now()) - self.startTime
                     ## no change in mode
             elif (self.prevMode == Burner.Mode3JustStopped):
                 if (self.status == Burner.STATUS_OFF):
                     self.mode = Burner.Mode4Cooling
-                    self.timeCooling = now() - self.stopTime
+                    self.timeCooling = math.trunc(now()) - self.stopTime
                 else:
                     self.mode = Burner.Mode1JustStarted
                     ## unexpected--register an error
-                    self.startTime = now()
+                    self.startTime = math.trunc(now()-1)  ## DWC 02.03 start burner timer at 1, rather than 0
             elif (self.prevMode == Burner.Mode4Cooling):
                 if (self.status == Burner.STATUS_OFF):
-                    self.timeCooling = now() - self.stopTime
+                    self.timeCooling =math.trunc(now()) - self.stopTime
                     ## elapsed = math.trunc(now() - self.stopTime)  Need math.trunc??
-                    if (((self.timeCooling >= 120) and ((self.timeCooling % 60) == 0))\
-                    or (self.timeCooling >= 180)\
-                    or (self.timeCooling <= -10)):  ## Check for large negative error
+                    if (((self.timeCooling >= 120) and ((math.trunc(now()) % 60) == 0))\
+                    or (self.timeCooling >= 180) or (self.timeCooling <= -10)):  ## Check for large negative error
                         self.mode = Burner.Mode5Off
                     ## Else stay in Mode4Cooling
                 else:
                     self.mode = Burner.Mode1JustStarted
-                    self.startTime = now()
+                    self.startTime = math.trunc(now()-1)
             elif (self.prevMode == Burner.Mode5Off):
                 if (self.status == Burner.STATUS_ON):
                     self.mode = Burner.Mode1JustStarted
-                    self.startTime = now()
+                    self.startTime = math.trunc(now()-1)
                 ## Else stay in Mode5Off
         return self.mode
+
+        """
+        Try these values in main, use to set time parameters:
+        .timeOn
+        .timeCooling
+        .mode
+        .status
+        .startTime
+        .stopTime
+        """
 
 
     def getMode(self):
@@ -1018,6 +1040,7 @@ burners = [waterHtr, furnace]
 
 def now():
     return time.time()
+    
 
 class Timer(object):
     """time manager"""
@@ -1088,7 +1111,7 @@ class Param(object):
         self.headers = headers
         self.units = units
         self.values = values
-        self.savedValue = [DEC(-99)]  ## List because it must be iterable in record()
+        #self.savedValue  ## List because it must be iterable in record()
 
     def reportHeaders(self):
         return self.headers
@@ -1102,17 +1125,18 @@ class Param(object):
     def reportStatData(self): ## len must match headers and units
         return self.values
 
-    def reportSavedStatData(self): ## len must match headers and units
-        return self.savedValue
-
-    ## DWC 0201 new functions to save timestamp for start of record, and state from prior scan
-    def setSavedVal(self, passed_value):
-        self.savedValue = passed_value
-        
-    ## Not sure we need this, may just use reportSavedStatData()  
-    ## Returns a list, because it must be iterable later in record()
-    def getSavedVal(self):
-        return [self.savedValue]       
+    ## DWC 02.02 drop attempts to save status values from top of scan
+#    def reportSavedStatData(self): ## len must match headers and units
+#        return self.savedValue
+#
+#    ## DWC 0201 new functions to save timestamp for start of record, and state from prior scan
+#    def setSavedVal(self, passed_value):
+#        self.savedValue = passed_value
+#        
+#    ## Not sure we need this, may just use reportSavedStatData()  
+#    ## Returns a list, because it must be iterable later in record()
+#    def getSavedVal(self):
+#        return [self.savedValue]       
 
     ## DWC 01.25 Is this append correct?  <= 0 looks funny
     ## It appears to be used in record setup: param.setValue(fields[0]+1)
@@ -1253,23 +1277,20 @@ class PressureParam(SampledParam):
         SampledParam.__init__(self, [fix+"", fix+"_rng", fix+"_stdev"], ["Pa", "Pa", "Pa"], loc, sensor) 
 
     def reportScanData(self): ## override
-        
-        ## DWC 01.27 this doesn't work - try going back to original line, or add a reference to bring currentVal to PressureParam
-        ## 
-        #return [self.currentVal, self.currentVal, self.currentVal]
-        return [self.val(), self.val(), self.val()]
+        ## DWC 02.03 set current val for range and stddev positions to NaN, since they don't represent real values of either
+        return [self.val(), NaN, NaN]
+        #return [self.val(), self.val(), self.val()]
  
     def reportStatData(self): ## override using currentPressureValveGlobal to determine when last value is used
         if True:       # currentPressureValveGlobal == 1:
             ## Use min max for testing, then go to stddev
-            return [self.avgVal(), self.minVal(), self.maxVal()]
-            #return [self.avgVal(), (self.maxVal()-self.minVal()), self.stdDev()
-            pass
+            #return [self.avgVal(), self.minVal(), self.maxVal()]
+            return [self.avgVal(), (self.maxVal()-self.minVal()), self.stdDev()]
 
     ## DWC 01.29 add new fcn that does not drop last value
     def reportStatDataInclusive(self): ## override using currentPressureValveGlobal to determine when last value is used
-            ## ***** Use min max for testing, then go to stddev
-            return [self.avgValInclusive(), self.minValInclusive(), self.maxValInclusive()]
+            ##  Use min max for testing, then go to stddev
+            return [self.avgValInclusive(), (self.maxValInclusive()-self.minValInclusive()), self.stdDevInclusive()]
 
 
 p_valve_pos = Param(["loc_p"],["integer"],[DEC(NaN)]) ## ad hoc param for reporting pressure valve position
@@ -1281,11 +1302,12 @@ zonepress = PressureParam("zone", p_zone)
 params.extend([p_valve_pos, p_valve_time, zeropress, whventpress, fventpress, zonepress])
 
 ## DWC 02.01 intitialize to default values, rather than DEC(NaN)
-whburner_stat = Param(["wh_status"],["integer"],[DEC(0)])
-whburner_mode = Param(["wh_mode"],["integer"],[DEC(5)]) 
-fburner_stat = Param(["f_status"],["integer"],[DEC(0)]) 
-fburner_mode = Param(["f_mode"],["integer"],[DEC(5)])
-monitor = Param(["sys_state"],["integer"],[DEC(6)])
+## DWC 02.02 drop the DEC)0) in initialization
+whburner_stat = Param(["wh_status"],["integer"],[0])
+whburner_mode = Param(["wh_mode"],["integer"],[5]) 
+fburner_stat = Param(["f_status"],["integer"],[0]) 
+fburner_mode = Param(["f_mode"],["integer"],[(5)])
+monitor = Param(["sys_state"],["integer"],[6])
 params.extend([whburner_stat,whburner_mode,fburner_stat, fburner_mode, monitor])
 
 scans_accum = Param(["scans_accum"],["integer"],[0]) # cleared every time a record is written
@@ -1323,6 +1345,7 @@ def record(recType):
         #print("Param(s): {}".format(param.reportHeaders()))
         if (recType == HeaderRec):
             fields = param.reportHeaders()
+            #print("HEADERS: {}".format(fields))
         elif (recType == UnitsRec):
             fields = param.reportUnits()
         elif (recType == SingleScanRec):
@@ -1338,6 +1361,15 @@ def record(recType):
                 if param.reportHeaders()[0][0:2] == 't_':  #if temps
                     trimmedFields.append(str.format("{:.1f}",field))
                     #print("type Temp. Value: {}".format(trimmedFields[-1]))
+                elif  param.reportHeaders()[0][0:3] == 'pos': 
+                    trimmedFields.append(str.format("{:.0f}",field))
+                elif  param.reportHeaders()[0][0:3] == 'ppm': 
+                    trimmedFields.append(str.format("{:.0f}",field))
+                #elif  param.reportHeaders()[0][0:7] == 'p_': 
+                #    trimmedFields.append(str.format("{:.1f}",field))
+                ## v applies to all XBee analog readings    
+                elif  param.reportHeaders()[0][0:1] == 'v': 
+                    trimmedFields.append(str.format("{:.0f}",field))
                 elif isinstance(field,int): 
                     trimmedFields.append(field)
                 elif isinstance(field, numbers.Number): #it's still a number
@@ -1345,6 +1377,7 @@ def record(recType):
                 else:
                     trimmedFields.append(field)
             fields = list(trimmedFields) # replace with trimmed values
+            #print("SINGLE-SCAN FIELDS: {} " .format(fields))
         elif (recType == MultiScanRec):
             ## 0131A DWC need temp variable to get headers for further evaluation?  Should be able to use param
             fields = param.reportStatData()
@@ -1362,33 +1395,26 @@ def record(recType):
                     fields = param.reportStatData()
                 else: 
                     fields = param.reportStatDataInclusive()
-                    ## **** Edit to call param.reportStatDataInclusive() for CO2
-                    ## **** be sure to clearAll CO2 data
-            elif (param.reportHeaders()[0][0:12] == "XXXXXXXXXXXXXXXX"):
+            ## DWC 02.02 it appears this elif is called in all cases - not sure why
+            elif (param.reportHeaders()[0][0:8] == "J25-1@U9"):
                 fields = param.reportStatDataInclusive()
-            elif (param.reportHeaders()[0][0:4] == "time"):    ## reportSavedStatData()
-                fields = param.reportSavedStatData()
-            elif (param.reportHeaders()[0][0:9] == "wh_status"):
-                fields = param.reportSavedStatData()
-                print("wh_status:  {}  " .format(whburner_stat), end='')
-            elif (param.reportHeaders()[0][0:7] == "wh_mode"):
-                fields = param.reportSavedStatData()
-                print("wh_mode  {} " .format(whburner_mode), end='')
-            elif (param.reportHeaders()[0][0:8] == "f_status"):
-                fields = param.reportSavedStatData()
-                print("f_status  {} " .format(fburner_stat), end='')
-            elif (param.reportHeaders()[0][0:6] == "f_mode"):
-                fields = param.reportSavedStatData()
-                print("f_mode  {} " .format(fburner_mode), end='')
-            elif (param.reportHeaders()[0][0:9] == "sys_state"):
-                fields = param.reportSavedStatData()
-                print("sys_state  {} " .format(monitor), end='')
-            elif (param.reportHeaders()[0][0:2] == "WXYZ"):
-                fields = param.reportSavedStatData()
-                print("WXYZ  {} " .format(monitor), end='')
-            elif (param.reportHeaders()[0][0:2] == "ABCD"):
-                fields = param.reportSavedStatData()
-                print("ABCD  {} " .format(monitor), end='')
+
+            ## DW 02.02 drop attempt to capture saved values from before state setting, etc            
+            #elif (param.reportHeaders()[0][0:4] == "time"):    ## reportSavedStatData()
+            #    fields = param.reportSavedStatData()
+            #elif (param.reportHeaders()[0][0:9] == "wh_status"):
+            #    fields = param.reportSavedStatData()
+            #elif (param.reportHeaders()[0][0:7] == "wh_mode"):
+            #    fields = param.reportSavedStatData()
+            #elif (param.reportHeaders()[0][0:8] == "f_status"):
+            #    fields = param.reportSavedStatData()
+            #elif (param.reportHeaders()[0][0:6] == "f_mode"):
+            #    fields = param.reportSavedStatData()
+            #elif (param.reportHeaders()[0][0:9] == "sys_state"):
+            #    fields = param.reportSavedStatData()
+            #elif (param.reportHeaders()[0][0:2] == "WXYZ"):
+            #    fields = param.reportSavedStatData()
+            #    print("WXYZ  {} " .format(monitor), end='')
             
 
                 # def setSavedVal(self, passed_value):
@@ -1414,17 +1440,51 @@ def record(recType):
                 fields = param.reportStatData() 
                 pass   
             #print("Fields before:{}".format(fields))
+            
+            ## As it was, triggers error Type int is not iterable.
+            #for field in fields: ## convert precisions  ## TODO is this for loop needed, since we're already cycling through params?
+            #    #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
+            #    if param.reportHeaders()[0][0:2] == 't_':  #if temps
+            #        trimmedFields.append(str.format("{:.1f}",field))
+            #        #print("type Temp. Value: {}".format(trimmedFields[-1]))
+            #    elif isinstance(field,int): 
+            #        trimmedFields.append(field)
+            #    elif isinstance(field, numbers.Number): #it's still a number
+            #        trimmedFields.append(str.format("{:.2f}",field))
+            #    else:
+            #        trimmedFields.append(field)
+            #fields = list(trimmedFields) # replace with trimmed values
+            
+            #print("MULTI-SCAN FIELDS: {} " .format(fields))
             for field in fields: ## convert precisions  ## TODO is this for loop needed, since we're already cycling through params?
                 #print("Param.reportHeaders()[0]: {}".format(param.reportHeaders()[0][0:2])) #DEBUG
-                if param.reportHeaders()[0][0:2] == 't_':  #if temps
-                    trimmedFields.append(str.format("{:.1f}",field))
-                    #print("type Temp. Value: {}".format(trimmedFields[-1]))
-                elif isinstance(field,int): 
-                    trimmedFields.append(field)
-                elif isinstance(field, numbers.Number): #it's still a number
-                    trimmedFields.append(str.format("{:.2f}",field))
-                else:
-                    trimmedFields.append(field)
+                #try:
+                    if param.reportHeaders()[0][0:2] == 't_':  #if temps
+                        trimmedFields.append(str.format("{:.1f}",field))
+                        #print("type Temp. Value: {}".format(trimmedFields[-1]))
+                #except:
+                #    print("Failed at  if param.reportHeaders()")
+                #try:
+                    ## ppm applies to both CO and CO2
+                    elif  param.reportHeaders()[0][0:3] == 'pos': 
+                        trimmedFields.append(str.format("{:.0f}",field))
+                    elif  param.reportHeaders()[0][0:3] == 'ppm': 
+                        trimmedFields.append(str.format("{:.0f}",field))
+                    #elif  param.reportHeaders()[0][0:7] == 'p_': 
+                    #    trimmedFields.append(str.format("{:.1f}",field))
+                    ## v applies to all XBee analog readings    
+                    elif  param.reportHeaders()[0][0:1] == 'v': 
+                        trimmedFields.append(str.format("{:.0f}",field))
+                    elif isinstance(field,int): 
+                        trimmedFields.append(field)
+                    elif isinstance(field, numbers.Number): #it's still a number
+                        trimmedFields.append(str.format("{:.2f}",field))
+                    else:
+                        trimmedFields.append(field)
+                    #print("TRIMMED FIELDS: {} " .format(trimmedFields))    
+                #except:
+                #    print("Failed at isinstance lines")
+                    
             fields = list(trimmedFields) # replace with trimmed values
         #print("Fields:{}".format(fields))
         commaIndex = 0
