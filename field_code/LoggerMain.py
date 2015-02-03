@@ -1103,8 +1103,9 @@ while True:
     print(" {:>s}{:>1d}".format(valvepressname, press_elapsed), end='')
     print("{:>6.1f}".format(currentpressure), end='') # local conversion to Pascals, inH2O sensor range +/- 2inH2O
     ## Deliver any xbee values to std out
+                                                                                                                                                
     for item in xbeeCaptureList:
-        if (item == float('NaN')):
+        if (math.isnan(item)):
             print("     ",end='')   ## Try dropping Decimal for nan formatting
         else:
             print ("{:>5.0f}".format(Decimal(item)),end='')

@@ -995,6 +995,7 @@ class Burner(object):
                     self.mode = Burner.Mode1JustStarted
                     ## unexpected--register an error
                     self.startTime = math.trunc(now()-1)  ## DWC 02.03 start burner timer at 1, rather than 0
+                    self.timeOn = math.trunc(now()) - self.startTime  ## And accumulate run time on burner start
             elif (self.prevMode == Burner.Mode4Cooling):
                 if (self.status == Burner.STATUS_OFF):
                     self.timeCooling =math.trunc(now()) - self.stopTime
@@ -1006,10 +1007,12 @@ class Burner(object):
                 else:
                     self.mode = Burner.Mode1JustStarted
                     self.startTime = math.trunc(now()-1)
+                    self.timeOn = math.trunc(now()) - self.startTime
             elif (self.prevMode == Burner.Mode5Off):
                 if (self.status == Burner.STATUS_ON):
                     self.mode = Burner.Mode1JustStarted
                     self.startTime = math.trunc(now()-1)
+                    self.timeOn = math.trunc(now()) - self.startTime
                 ## Else stay in Mode5Off
         return self.mode
 
