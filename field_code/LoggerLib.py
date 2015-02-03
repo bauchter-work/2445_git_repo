@@ -1373,6 +1373,9 @@ def record(recType):
                 ## v applies to all XBee analog readings    
                 elif  param.reportHeaders()[0][0:1] == 'v': 
                     trimmedFields.append(str.format("{:.0f}",field))
+                elif  param.reportHeaders()[0][0:3] == 'sec':           ## seconds run time should be integers
+                    trimmedFields.append(str.format("{:.0f}",field))
+                
                 elif isinstance(field,int): 
                     trimmedFields.append(field)
                 elif isinstance(field, numbers.Number): #it's still a number
@@ -1478,6 +1481,9 @@ def record(recType):
                     ## v applies to all XBee analog readings    
                     elif  param.reportHeaders()[0][0:1] == 'v': 
                         trimmedFields.append(str.format("{:.0f}",field))
+                    elif  param.reportHeaders()[0][0:3] == 'sec':           ## seconds run time should be integers
+                        trimmedFields.append(str.format("{:.0f}",field))                    
+                    
                     elif isinstance(field,int): 
                         trimmedFields.append(field)
                     elif isinstance(field, numbers.Number): #it's still a number
