@@ -30,7 +30,8 @@
 ## 2015.02.02 DanC - Dropped attempts to capture status values from prior scan.  Fixed stddev. 
 ##                 - Edited burner rules. 
 ## 2015.02.03 DanC - Pressure single scan values, run time, burner rules
-
+## 2015.02.04 DanC - Edited Burner calcMode() to actively set mode=0 for non-existent appliance, and to set time values to 0 
+##                 - Edited Burner status rules temperature values for field deployment rather than bench testing.  
 
 
 from __future__ import print_function
@@ -763,6 +764,7 @@ class Dlvr(I2c, Sensor):
         self.appendValue(value)
         pass
     """
+    
     ## DWC 01.26 don't appear to need this, can use Sensor.setCurrentVal()
     #def assignPressValue(self, value)
         #pass
@@ -891,6 +893,7 @@ co2_valves = [co2_whvent_valve, co2_fvent_valve, co2_zone_valve]
 
 class Burner(object):
     """includes all (both) burners"""
+    
     Mode0NotPresent = 0
     Mode1JustStarted = 1
     Mode2On = 2
@@ -918,10 +921,10 @@ class Burner(object):
 
     def calcStatus(self):
         ## **** EDIT VALUES BEFORE FIELD DEPLOYMENT
-        T_ON_THRESHOLD = 100       ## Set to 190 F
-        T_OFF_DEADBAND =  25       ## Keep at 30 F  ## Keep these as set in each burnere intialization 
-        #DT_TURN_ON     =   5       ## Set to 8F?
-        #DT_TURN_OFF    =  -5       ## Keep at -5F ?
+        T_ON_THRESHOLD = 190       ## Avg temp above this values -> burner ON
+        T_OFF_DEADBAND =  30       ## Avg temp below  (T_ON_THRESHOLD - this value) -> burner OFF
+        #DT_TURN_ON     =   5       ## Set in waterHtr and furnace intialization below, so can be adjusted to different values if needed
+        #DT_TURN_OFF    =  -5       ## Set in waterHtr and furnace intialization below, so can be adjusted to different values if needed
         DT_STAY_ON     =  10       ## Temp rise rate to confirm On status - should be a pretty high bar
         DT_STAY_OFF    = -10       ## Temp drop rate to confirm Off status - should be a pretty high bar
 
@@ -1014,18 +1017,13 @@ class Burner(object):
                     self.startTime = math.trunc(now()-1)
                     self.timeOn = math.trunc(now()) - self.startTime
                 ## Else stay in Mode5Off
+        else:
+            ## DWC 02.04 added mode setting for non-present appliance, and time values (always 0 sec) to be availablein Main
+            self.mode = Burner.Mode0NotPresent            
+            self.prevMode = Burner.Mode0NotPresent
+            self.timeOn = 0  ## set in mode calcs as needed.  02.03 set as integer, not 0.0
+            self.timeCooling = 0
         return self.mode
-
-        """
-        Try these values in main, use to set time parameters:
-        .timeOn
-        .timeCooling
-        .mode
-        .status
-        .startTime
-        .stopTime
-        """
-
 
     def getMode(self):
         return self.mode

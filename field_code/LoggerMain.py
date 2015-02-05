@@ -33,6 +33,7 @@
 ## 2015.02.01 DanC - Dropped attempts to capture status values from prior scan.  Fixed xbee3 designation as Xbee param.
 ## 2015.02.02 DanC - Simplified state setting (most done in Lib).
 ## 2015.02.03 DanC - Cleaned up data resolution, std out
+## 2015.02.04 DanC - Set CO2 background sampling interval to 14400 (4 hours)
 
    
 from __future__ import print_function
@@ -51,7 +52,7 @@ import numbers
 ## Constants 
 CO2VALVECYCLE = 20   ## CO2 valve operating cycle (sec)
 CO2CLEARTIME  = 12   ## Time allowed for clearing CO2 system, good data comes after this
-CO2_BACKGROUND_SAMPLING_PER  =  900    ## Seconds for background sampling.  15min = 900sec, 4hr = 14400sec
+CO2_BACKGROUND_SAMPLING_PER  =  14400    ## Seconds for background sampling.  15min = 900sec, 4hr = 14400sec
 PRESSVALVECYCLE = 3
 NaN = float('NaN')
 
