@@ -578,7 +578,7 @@ BBB_xBeeNodes = Lib.Param(["xBeeNodes"],["Hex Addresses"],[str(xBeeNodes).replac
 BBB_xBeeNodeTypes = Lib.Param(["xBeeNodeTypes"],["Sensor Type"],[str(xBeeNodeTypes).replace(","," ")])
 BBB_CO_Calibration = Lib.Param(["CO_Calib_Factor"],["int"],[Conf.co_calib_value])
 BBB_WH_is_present = Lib.Param(["WHisPresent"],["bool"],[Conf.waterHeaterIsPresent])
-BBB_F_is_present = Lib.Param(["WHisPresent"],["bool"],[Conf.furnaceIsPresent])
+BBB_F_is_present = Lib.Param(["FisPresent"],["bool"],[Conf.furnaceIsPresent])
 BBB_reverseSSHport = Lib.Param(["reverseSSHport"],["int"],[Conf.reverseSSHport])
 Lib.diagParams.extend([BBB_id, BBB_CO_Calibration, BBB_WH_is_present, \
         BBB_F_is_present, BBB_xBeeNodes, BBB_xBeeNodeTypes, BBB_reverseSSHport])
