@@ -212,7 +212,8 @@ def fetchAdcInputs():    #NOTE will execute, but test sufficiently to verify rel
                             Value = adc.fetchAdc()
                             if sensor.name[0:2] == "TC":  #perhaps break the conversion out from the read cycle?
                                 ## temperature conversion is done in Lib.Tc
-                                if(Value > 999.0 or Value < -80.0):
+                                ## DWC 02.17 change limits to correspond to 1000 and lower ADC limit of 0 mV
+                                if(Value > 2689.0 or Value < 0.0):
                                     Value = NaN
                                 sensor.appendAdcValue(Value) # conversions for Tcs are performed in AdcValue.
                                 #result = sensor.getLastVal()

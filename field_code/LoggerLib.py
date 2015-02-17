@@ -32,6 +32,7 @@
 ## 2015.02.03 DanC - Pressure single scan values, run time, burner rules
 ## 2015.02.04 DanC - Edited Burner calcMode() to actively set mode=0 for non-existent appliance, and to set time values to 0 
 ##                 - Edited Burner status rules temperature values for field deployment rather than bench testing.  
+## 2015.02.04 DanC - Edited Burner status rules temperature values to prevent alternating cycles of on & off
 
 
 from __future__ import print_function
@@ -921,20 +922,14 @@ class Burner(object):
 
     def calcStatus(self):
         ## **** EDIT VALUES BEFORE FIELD DEPLOYMENT
-        T_ON_THRESHOLD = 190       ## Avg temp above this values -> burner ON
-        T_OFF_DEADBAND =  30       ## Avg temp below  (T_ON_THRESHOLD - this value) -> burner OFF
+        T_ON_THRESHOLD  = 250       ## Avg temp above this values -> burner ON  02.17 changed 190 to 250 to prevent cycling on cooling
+        T_OFF_DEADBAND  =  50       ## Avg temp below  (T_ON_THRESHOLD - this value) -> burner OFF.  02.17 changed 30 to 50
         #DT_TURN_ON     =   5       ## Set in waterHtr and furnace intialization below, so can be adjusted to different values if needed
         #DT_TURN_OFF    =  -5       ## Set in waterHtr and furnace intialization below, so can be adjusted to different values if needed
-        DT_STAY_ON     =  10       ## Temp rise rate to confirm On status - should be a pretty high bar
-        DT_STAY_OFF    = -10       ## Temp drop rate to confirm Off status - should be a pretty high bar
+        DT_STAY_ON      =   8       ## Temp rise rate to confirm On status - changed from 10 to 8, but may not be needed 
+        DT_STAY_OFF     =  -5       ## Temp drop rate to confirm Off status - changed from -10 to-5 due to cycling
 
-        #T_ON_THRESHOLD = 190       ## Set to 190 F
-        #T_OFF_DEADBAND =  30       ## Keep at 30 F  ## Keep these as set in each burnere intialization 
-        ##DT_TURN_ON     =   5       ## Set to 8F?
-        ##DT_TURN_OFF    =  -5       ## Keep at -5F ?
-        #DT_STAY_ON     =  10       ## Temp rise rate to confirm On status - should be a pretty high bar
-        #DT_STAY_OFF    = -10       ## Temp drop rate to confirm Off status - should be a pretty high bar
-        self.prevStatus = self.status
+        self.prevStatus  = self.status
         last = self.tc.getLastVal()
         if (last != NaN):
             avg = self.tc.getMovAvg()
