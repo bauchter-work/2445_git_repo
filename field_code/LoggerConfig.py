@@ -1,29 +1,32 @@
 #! /usr/bin/python
-
 # Configuration Information for BeagleBone Black datalogging
-# 2014-10-28 BDA - Initial draft
-# 2014-11-12 BDA - Brought out Config items from LoggerMain.py
 
-siteName = "none"           ## Give your site a unique Name (this will be embedded in the output files)
-                            ## DO NOT use spaces or special characters.  Underscores are fine.
-                            ## This name is correlated to a unique hardware attribute
+siteName = "none"      ## Site names should be STATE_number like "MN_08" or "IL_02", in quotes.  
+                       ## Increment the number for each new site.  DO NOT use spaces or special characters.  
 
-waterHeaterIsPresent = True ## True or False - update if present
-furnaceIsPresent = True     ## True or False
-xBeeNode1 = "0xffff"   ## Declare End Node addresses for deployed xBee sensors (last 4 hex digits 
-                       ##  in the long address of the xbee.
-xBeeNode1Type = "none"   ## type "CT", "Pressure", "Door", "none"   
+co_calib_value = 1700  ## replace with device-specific calibration number. 
+                       ## Default = 1700 - no surrounding quotes
 
-xBeeNode2 = "0xffff"   ## Node 2, use "0xffff" if not deployed
-xBeeNode2Type = "none" ## type "CT", "Pressure", "Door", "none"    
+waterHeaterIsPresent = True ## type True or False - no surrounding quotes
 
-xBeeNode3 = "0xffff"   ## Node 3, use "0xffff" if not deployed
-xBeeNode3Type = "none" ## type "CT", "Pressure", "Door", "none" 
+furnaceIsPresent = True     ## type True or False - no surrounding quotes
 
-co_calib_value = 1700  ## replace with device-specific calibration number. Default = 1700
 
-savePath = "/srv/field-research/data/" ## location to store data on BBB
+xBeeNode1 = "0xffff"   ## Node 1, use "0xffff" if not deployed - include quotes
+xBeeNode1Type = "none" ## type "CT", "Pressure", "Door", "none" - incl. quotes   
 
+xBeeNode2 = "0xffff"   ## Node 2, use "0xffff" if not deployed - incl. quotes
+xBeeNode2Type = "none" ## type "CT", "Pressure", "Door", "none" - incl. quotes
+
+xBeeNode3 = "0xffff"   ## Node 3, use "0xffff" if not deployed - incl. quotes
+xBeeNode3Type = "none" ## type "CT", "Pressure", "Door", "none" - incl. quotes
+
+
+## This port number is generally NOT CHANGED during field setup
+reverseSSHport = 7000  ## Site specific port for contacting remotely
+
+## Default Settings - DO NOT CHANGE ##
+savePath = "/srv/field-research/data/" ## location to store data on BBB - Don't Change This
 maxFileSize = 750000000  ## Maximum data filesize before creating a new data file (don't exceed 1GB)
-reverseSSHport = 7000   ## Site specific port for contacting remotely
+
 

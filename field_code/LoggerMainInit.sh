@@ -9,6 +9,9 @@
 # ASSUMES FILE HAS A VALID PORT THAT HASN'T BEEN ALLOCATED ALREADY
 # 
 # ASSUMES SSH keys have been generated and shared with rsync destination!
+
+# delay 1 minute to allow for other scripts and processes to execute...
+sleep 60 
 /usr/bin/nohup /usr/bin/python /srv/field-research/field-code/LoggerMain.py >&/dev/null &
 RPORT=$(cat /srv/field-research/field-code/reverseSSHport)
 
