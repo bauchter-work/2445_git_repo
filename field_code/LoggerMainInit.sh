@@ -11,7 +11,7 @@
 # ASSUMES SSH keys have been generated and shared with rsync destination!
 
 # delay 1 minute to allow for other scripts and processes to execute...
-sleep 2m 
+sleep 1m 
 /usr/bin/nohup /usr/bin/python /srv/field-research/field-code/LoggerMain.py >&/dev/null &
 RPORT=$(cat /srv/field-research/field-code/reverseSSHport)
 
